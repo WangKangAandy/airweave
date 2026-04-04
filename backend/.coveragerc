@@ -1,0 +1,9 @@
+[run]
+omit =
+    airweave/platform/sources/*
+    airweave/platform/entities/*
+    airweave/domains/sources/*
+    airweave/domains/entities/*
+    **/fake.py
+    **/fakes/*
+    **/tests/*

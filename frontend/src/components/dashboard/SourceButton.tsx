@@ -1,0 +1,161 @@
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Plus } from "lucide-react";
+import { getAppIconUrl, getColorClass } from "@/lib/utils/icons";
+import { useTheme } from "@/lib/theme-provider";
+import { cn } from "@/lib/utils";
+import { useImageFallback } from "@/hooks/use-image-fallback";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { SingleActionCheckResponse } from "@/types";
+
+interface SourceButtonProps {
+  id: string;
+  name: string;
+  shortName: string;
+  supportsBrowseTree?: boolean;
+  onClick?: () => void;
+  disabled?: boolean;
+  usageCheckDetails?: {
+    source_connections?: SingleActionCheckResponse | null;
+    entities?: SingleActionCheckResponse | null;
+  };
+}
+
+export const SourceButton = ({ id, name, shortName, supportsBrowseTree, onClick, disabled, usageCheckDetails }: SourceButtonProps) => {
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme === 'dark';
+
+  const iconSrc = getAppIconUrl(shortName, resolvedTheme);
+  const { error: iconError, onError: onIconError } = useImageFallback(iconSrc);
+
+  // Determine which action is blocking and get tooltip content
+  const getTooltipContent = () => {
+    if (!usageCheckDetails || !disabled) return null;
+
+    const { source_connections, entities } = usageCheckDetails;
+
+    if (source_connections && !source_connections.allowed && source_connections.reason === 'usage_limit_exceeded') {
+      return (
+        <>
+          Source connection limit reached.{' '}
+          <a
+            href="/organization/settings?tab=billing"
+            className="underline"
+            onClick={(e) => e.stopPropagation()}
+          >
+            Upgrade your plan
+          </a>
+          {' '}for more connections.
+        </>
+      );
+    } else if (entities && !entities.allowed && entities.reason === 'usage_limit_exceeded') {
+      return (
+        <>
+          Entity processing limit reached.{' '}
+          <a
+            href="/organization/settings?tab=billing"
+            className="underline"
+            onClick={(e) => e.stopPropagation()}
+          >
+            Upgrade your plan
+          </a>
+          {' '}to process more data.
+        </>
+      );
+    }
+
+    return 'Unable to create collection at this time.';
+  };
+
+  const tooltipContent = getTooltipContent();
+
+  const buttonContent = (
+    <div
+      className={cn(
+        "border rounded-lg overflow-hidden group transition-all min-w-[150px]",
+        disabled
+          ? isDark
+            ? "border-gray-800 bg-gray-900/30 opacity-50 cursor-not-allowed"
+            : "border-gray-200 bg-white/50 opacity-50 cursor-not-allowed"
+          : isDark
+            ? "border-gray-800 hover:border-gray-700 bg-gray-900/50 hover:bg-gray-900 cursor-pointer"
+            : "border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50 cursor-pointer"
+      )}
+      onClick={disabled ? undefined : onClick}
+    >
+      <div className="p-2 sm:p-3 md:p-4 flex items-center justify-between">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <div className={cn(
+            "flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 overflow-hidden rounded-md flex-shrink-0",
+            iconError && getColorClass(shortName)
+          )}>
+            {iconError ? (
+              <span className="text-white font-semibold text-xs sm:text-sm">
+                {shortName.substring(0, 2).toUpperCase()}
+              </span>
+            ) : (
+              <img
+                src={iconSrc}
+                alt={`${shortName} icon`}
+                className="w-7 h-7 sm:w-8 sm:h-8 md:w-9 md:h-9 object-contain"
+                onError={onIconError}
+              />
+            )}
+          </div>
+          <span className={cn(
+            "text-xs sm:text-sm font-medium truncate",
+            disabled && "text-muted-foreground"
+          )}>{name}</span>
+          {supportsBrowseTree && (
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 flex-shrink-0 border-blue-300 text-blue-500 dark:border-blue-700 dark:text-blue-400">
+              Browse
+            </Badge>
+          )}
+        </div>
+        <Button
+          size="icon"
+          variant="ghost"
+          disabled={disabled}
+          className={cn(
+            "h-6 w-6 sm:h-7 sm:w-7 md:h-8 md:w-8 rounded-full flex-shrink-0",
+            disabled
+              ? isDark
+                ? "bg-gray-800/50 text-gray-500 cursor-not-allowed"
+                : "bg-gray-100/50 text-gray-400 cursor-not-allowed"
+              : isDark
+                ? "bg-gray-800/80 text-blue-400 hover:bg-blue-600/20 hover:text-blue-300 group-hover:bg-blue-600/30"
+                : "bg-gray-100/80 text-blue-500 hover:bg-blue-100 hover:text-blue-600 group-hover:bg-blue-100/80"
+          )}
+        >
+          <Plus className="h-3 w-3 sm:h-3.5 sm:w-3.5 md:h-4 md:w-4 group-hover:h-4 group-hover:w-4 sm:group-hover:h-4.5 sm:group-hover:w-4.5 md:group-hover:h-5 md:group-hover:w-5 transition-all" />
+        </Button>
+      </div>
+    </div>
+  );
+
+  if (disabled && tooltipContent) {
+    return (
+      <TooltipProvider delayDuration={100}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span tabIndex={0} className="w-full">
+              {buttonContent}
+            </span>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-xs">
+            <p className="text-xs">{tooltipContent}</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  }
+
+  return buttonContent;
+};
+
+export default SourceButton;
