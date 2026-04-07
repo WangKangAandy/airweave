@@ -253,3 +253,113 @@ def get_available_models(provider: LLMProvider) -> list[LLMModel]:
     if provider not in MODEL_REGISTRY:
         raise ValueError(f"Unknown provider: {provider}")
     return list(MODEL_REGISTRY[provider].keys())
+
+
+def fetch_local_models(base_url: str, api_key: str | None = None) -> list[str]:
+    """Fetch available models from a local OpenAI-compatible endpoint.
+
+    Args:
+        base_url: The base URL of the OpenAI-compatible API (e.g., http://localhost:11434/v1)
+        api_key: Optional API key (some local LLMs don't require one)
+
+    Returns:
+        List of model IDs available at the endpoint
+    """
+    import requests
+
+    try:
+        headers = {"Content-Type": "application/json"}
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+
+        resp = requests.get(
+            f"{base_url.rstrip('/')}/models",
+            headers=headers,
+            timeout=10,
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            return [model["id"] for model in data.get("data", [])]
+        return []
+    except Exception:
+        return []
+
+
+def create_local_model_spec(model_id: str) -> LLMModelSpec:
+    """Create a model spec for a local OpenAI-compatible model.
+
+    Uses conservative defaults suitable for most local models.
+    The actual model capabilities may vary, but this should work
+    for basic functionality.
+
+    Args:
+        model_id: The model ID (e.g., 'qwen2.5:7b-instruct')
+
+    Returns:
+        A LLMModelSpec with conservative defaults
+    """
+    model_id_lower = model_id.lower()
+
+    is_embedding_model = any(
+        keyword in model_id_lower
+        for keyword in ["embed", "embedding", "bge", "e5", "rerank"]
+    )
+
+    if is_embedding_model:
+        return LLMModelSpec(
+            api_model_name=model_id,
+            context_window=8192,
+            max_output_tokens=4096,
+            required_tokenizer_type=TokenizerType.TIKTOKEN,
+            required_tokenizer_encoding=TokenizerEncoding.O200K_HARMONY,
+            thinking_config=ThinkingConfig(param_name="_noop", param_value=False),
+            input_price_factor=0.0,
+            output_price_factor=0.0,
+        )
+
+    return LLMModelSpec(
+        api_model_name=model_id,
+        context_window=8192,
+        max_output_tokens=4096,
+        required_tokenizer_type=TokenizerType.TIKTOKEN,
+        required_tokenizer_encoding=TokenizerEncoding.O200K_HARMONY,
+        thinking_config=ThinkingConfig(param_name="_noop", param_value=False),
+        input_price_factor=0.0,
+        output_price_factor=0.0,
+    )
+
+
+def select_best_local_model(models: list[str]) -> str | None:
+    """Select the best LLM model from a list of available models.
+
+    Prefers chat/instruct models over embedding models.
+
+    Args:
+        models: List of model IDs from the OpenAI-compatible endpoint
+
+    Returns:
+        The selected model ID, or None if no suitable model found
+    """
+    if not models:
+        return None
+
+    embedding_keywords = ["embed", "embedding", "bge", "e5", "rerank"]
+    llm_keywords = ["instruct", "chat", "gpt", "claude", "llama", "qwen", "glm", "mistral"]
+
+    llm_models = []
+    embedding_models = []
+
+    for model in models:
+        model_lower = model.lower()
+        if any(kw in model_lower for kw in embedding_keywords):
+            embedding_models.append(model)
+        elif any(kw in model_lower for kw in llm_keywords):
+            llm_models.append(model)
+
+    if llm_models:
+        return llm_models[0]
+
+    if embedding_models:
+        return embedding_models[0]
+
+    return models[0]

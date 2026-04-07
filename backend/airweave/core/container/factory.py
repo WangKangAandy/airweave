@@ -29,6 +29,9 @@ from airweave.adapters.llm.registry import (
     LLMModel,
     LLMProvider,
     PROVIDER_API_KEY_SETTINGS,
+    create_local_model_spec,
+    fetch_local_models,
+    select_best_local_model,
 )
 from airweave.adapters.llm.registry import (
     get_model_spec as get_llm_model_spec,
@@ -1217,12 +1220,51 @@ def _build_llm_chain(
 
     # Build fallback chain: prepend OpenAI if OPENAI_BASE_URL is configured
     llm_fallback_chain = config.LLM_FALLBACK_CHAIN.copy()
-    if settings.OPENAI_BASE_URL:
-        llm_fallback_chain.insert(
-            0,
-            (LLMProvider.OPENAI, LLMModel.GPT_4O_MINI),
+
+    # For local OpenAI-compatible endpoints (Ollama, vLLM, etc.), auto-detect available models
+    local_model_override = None
+    if settings.OPENAI_BASE_URL and not settings.OPENAI_MODEL_OVERRIDE:
+        logger.info(
+            f"[SearchFactory] OPENAI_BASE_URL configured without MODEL_OVERRIDE, "
+            f"fetching available models from {settings.OPENAI_BASE_URL}"
         )
-        logger.info("[SearchFactory] OPENAI_BASE_URL configured, prepending OpenAI to fallback chain")
+        try:
+            local_models = fetch_local_models(
+                settings.OPENAI_BASE_URL,
+                settings.OPENAI_API_KEY,
+            )
+            if local_models:
+                # Use the best available model (prefer LLM over embedding models)
+                local_model_override = select_best_local_model(local_models)
+                logger.info(
+                    f"[SearchFactory] Auto-selected model '{local_model_override}' "
+                    f"from {len(local_models)} available models: {local_models}"
+                )
+            else:
+                logger.warning(
+                    f"[SearchFactory] No models returned from {settings.OPENAI_BASE_URL}, "
+                    f"falling back to default gpt-4o-mini"
+                )
+        except Exception as e:
+            logger.warning(
+                f"[SearchFactory] Failed to fetch models from {settings.OPENAI_BASE_URL}: {e}, "
+                f"falling back to default gpt-4o-mini"
+            )
+
+    if settings.OPENAI_BASE_URL:
+        # Determine model to use: override > auto-detected > default
+        model_to_use = settings.OPENAI_MODEL_OVERRIDE or local_model_override
+        if model_to_use:
+            # Create a dynamic model entry for local models
+            model_spec = create_local_model_spec(model_to_use)
+            llm_fallback_chain.insert(0, (LLMProvider.OPENAI, LLMModel.GPT_4O_MINI))
+            logger.info(
+                f"[SearchFactory] OPENAI_BASE_URL configured, prepending OpenAI "
+                f"({model_to_use}) to fallback chain"
+            )
+        else:
+            llm_fallback_chain.insert(0, (LLMProvider.OPENAI, LLMModel.GPT_4O_MINI))
+            logger.info("[SearchFactory] OPENAI_BASE_URL configured, prepending OpenAI to fallback chain")
 
     # Collect available (provider, model_spec, class) tuples first,
     # then decide retry strategy based on how many survived.
@@ -1236,7 +1278,19 @@ def _build_llm_chain(
             logger.debug(f"[SearchFactory] Skipping {provider.value}: no API key")
             continue
 
-        model_spec = get_llm_model_spec(provider, model)
+        # For local OpenAI-compatible endpoints, use the auto-detected model spec
+        if (
+            provider == LLMProvider.OPENAI
+            and settings.OPENAI_BASE_URL
+            and local_model_override
+        ):
+            model_spec = create_local_model_spec(local_model_override)
+            logger.debug(
+                f"[SearchFactory] Using local model spec for {local_model_override}"
+            )
+        else:
+            model_spec = get_llm_model_spec(provider, model)
+
         provider_cls = provider_classes.get(provider)
         if provider_cls is None:
             logger.warning(f"[SearchFactory] Unknown provider: {provider.value}")
