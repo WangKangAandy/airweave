@@ -1,0 +1,31 @@
+---
+alwaysApply: false
+---
+# Airweave Raw Format (ARF)
+
+Raw entity capture for replay, debugging, and evals.
+
+## Structure
+
+```
+raw/{sync_id}/
+├── manifest.json          # Sync metadata
+├── entities/{id}.json     # One file per entity
+└── files/{id}_{name}      # Binary files (optional)
+```
+
+## Key Files
+
+- **StoragePaths**: `domains/storage/paths.py` (path constants: `arf_sync_path`, `arf_entity_path`, `safe_filename`)
+- **ArfService**: `domains/arf/service.py` (write operations during sync, implements `ArfServiceProtocol`)
+- **ArfReader**: `domains/arf/reader.py` (entity reconstruction for replay, implements `ArfReaderProtocol`)
+- **ArfReplaySource**: `domains/arf/replay_source.py` (internal source for ARF replay)
+- **Protocols**: `domains/arf/protocols.py` (`ArfServiceProtocol`, `ArfReaderProtocol`)
+- **Fakes**: `domains/arf/fakes/` (in-memory test doubles: `FakeArfService`, `FakeArfReader`)
+- **StorageBackend protocol**: `domains/storage/protocols.py` (injected into ArfService/ArfReader)
+- **Storage adapters** (FYI): `adapters/storage/` (Filesystem, Azure Blob, AWS S3, GCP GCS)
+- **Config**: `STORAGE_BACKEND` (filesystem, azure, aws, gcp)
+
+## Usage
+
+`ArfService` is injected into `ArfHandler` via `EntityDispatcherBuilder`. Capture happens during action dispatch (INSERT/UPDATE entities stored, DELETE entities removed). The `ArfHandler` lives in `platform/sync/handlers/arf.py`.

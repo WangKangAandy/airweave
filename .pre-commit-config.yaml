@@ -1,0 +1,63 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.9.6
+    hooks:
+      - id: ruff
+        types_or: [python, pyi, jupyter]
+        args: [--fix]
+        files: ^backend/
+      - id: ruff-format
+        types_or: [python, pyi, jupyter]
+        files: ^backend/
+        exclude: backend/tests
+
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy
+        entry: bash -c 'cd backend && poetry run mypy --config-file pyproject.toml "${@#backend/}"' --
+        language: system
+        files: ^backend/airweave/.*\.py$
+        types: [python]
+
+  - repo: local
+    hooks:
+      - id: import-linter
+        name: import-linter
+        entry: bash -c 'cd backend && poetry run lint-imports'
+        language: system
+        files: ^backend/.*\.py$
+        pass_filenames: false
+
+  - repo: local
+    hooks:
+      - id: pytest-unit
+        name: pytest (unit)
+        entry: bash -c 'cd backend && poetry run pytest tests/unit -q --no-cov'
+        language: system
+        files: ^backend/.*\.py$
+        pass_filenames: false
+
+  - repo: local
+    hooks:
+      - id: eslint
+        name: eslint
+        entry: bash -c 'cd frontend && npx eslint'
+        language: system
+        files: \.(js|jsx|ts|tsx)$
+        types: [file]
+        exclude: ^(?!frontend/).*$
+
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: v1.17.0
+    hooks:
+      - id: commitizen
+        stages: [commit-msg]

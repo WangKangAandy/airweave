@@ -1,0 +1,147 @@
+---
+title: "Todoist"
+description: "Todoist integration with Airweave"
+---
+
+{/* AUTO-GENERATED CONTENT START */}
+
+
+
+<div className="connector-header" style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+  <img src="icon.svg" alt="Todoist logo" width="48" height="48" className="connector-icon" />
+  <h1 style={{ margin: 0 }}>Todoist</h1>
+</div>
+
+This connector enables AI agents and RAG systems to retrieve context from Todoist through Airweave's unified search layer.
+
+## Configuration
+
+Todoist source connector integrates with the Todoist REST API to extract task data.
+
+Connects to your Todoist workspace.
+
+It provides comprehensive access to projects, tasks, and
+collaboration features with proper hierarchical organization and productivity insights.
+
+<Card
+  title="View Source Code"
+  icon="brands github"
+  href="https://github.com/airweave-ai/airweave/tree/main/backend/airweave/platform/sources/todoist.py"
+>
+  Explore the Todoist connector implementation
+</Card>
+
+### Authentication
+
+This connector uses **OAuth 2.0 authentication**. You can connect through the Airweave UI or API using the OAuth flow.
+
+**Supported authentication methods:**
+- OAuth Browser Flow (recommended for UI)
+- OAuth Token (for programmatic access)
+- Auth Provider (enterprise SSO)
+
+### Configuration Options
+
+This connector does not have any additional configuration options.
+
+## Data Models
+
+The following data models are available for this connector:
+
+<Accordion title="TodoistProjectEntity">
+
+Schema for Todoist project entities.
+
+Reference:
+    https://developer.todoist.com/api/v1/#tag/Projects
+
+| Field | Type | Description |
+|-------|------|-------------|
+| project_id | str | Todoist project ID. |
+| project_name | str | Display name of the project. |
+| created_time | datetime | When the project snapshot was created. |
+| updated_time | datetime | When the project snapshot was updated. |
+| web_url_value | Optional[str] | URL to open the project in Todoist. |
+| color | Optional[str] | Color of the project (e.g., 'grey', 'blue') |
+| order | int | Project order in the project list |
+| is_shared | bool | Whether the project is shared with others |
+| is_favorite | bool | Whether the project is marked as a favorite |
+| is_inbox_project | bool | Whether this is the Inbox project |
+| is_team_inbox | bool | Whether this is the team Inbox project |
+| view_style | Optional[str] | Project view style ('list' or 'board') |
+| url | Optional[str] | URL to access the project |
+| parent_id | Optional[str] | ID of the parent project if nested |
+
+</Accordion>
+<Accordion title="TodoistSectionEntity">
+
+Schema for Todoist section entities.
+
+Reference:
+    https://developer.todoist.com/api/v1/#tag/Sections
+
+| Field | Type | Description |
+|-------|------|-------------|
+| section_id | str | Todoist section ID. |
+| section_name | str | Display name of the section. |
+| project_id | str | ID of the project this section belongs to |
+| order | int | Section order in the project |
+
+</Accordion>
+<Accordion title="TodoistTaskEntity">
+
+Schema for Todoist task entities.
+
+Reference:
+    https://developer.todoist.com/api/v1/#tag/Tasks
+
+| Field | Type | Description |
+|-------|------|-------------|
+| task_id | str | Todoist task ID. |
+| content | str | The task content/title |
+| created_time | datetime | When the task was created. |
+| updated_time | datetime | Last update timestamp for the task. |
+| web_url_value | Optional[str] | URL to open the task in Todoist. |
+| description | Optional[str] | Optional detailed description of the task |
+| is_completed | bool | Whether the task is completed |
+| completed_at | Optional[str] | Timestamp when the task was completed (ISO 8601) |
+| labels | List[str] | List of label names attached to the task |
+| order | int | Task order in the project or section |
+| priority | int | Task priority (1-4, 4 is highest) |
+| project_id | Optional[str] | ID of the project this task belongs to |
+| section_id | Optional[str] | ID of the section this task belongs to |
+| parent_id | Optional[str] | ID of the parent task if subtask |
+| creator_id | Optional[str] | ID of the user who created the task |
+| assignee_id | Optional[str] | ID of the user assigned to the task |
+| assigner_id | Optional[str] | ID of the user who assigned the task |
+| due_date | Optional[str] | Due date in YYYY-MM-DD format |
+| due_datetime | Optional[Any] | Due date and time |
+| due_string | Optional[str] | Original due date string (e.g., 'tomorrow') |
+| due_is_recurring | bool | Whether the task is recurring |
+| due_timezone | Optional[str] | Timezone for the due date |
+| deadline_date | Optional[str] | Deadline date in YYYY-MM-DD format |
+| duration_amount | Optional[int] | Duration amount |
+| duration_unit | Optional[str] | Duration unit ('minute' or 'day') |
+| url | Optional[str] | URL to access the task |
+
+</Accordion>
+<Accordion title="TodoistCommentEntity">
+
+Schema for Todoist comment entities.
+
+Reference:
+    https://developer.todoist.com/api/v1/#tag/Comments
+
+| Field | Type | Description |
+|-------|------|-------------|
+| comment_id | str | Todoist comment ID. |
+| task_id | str | ID of the task this comment belongs to |
+| content | str | The comment content |
+| posted_at | datetime | When the comment was posted |
+
+</Accordion>
+
+
+
+
+{/* AUTO-GENERATED CONTENT END */}

@@ -1,0 +1,583 @@
+---
+title: Search
+description: Search API reference for Airweave
+edit-this-page-url: https://github.com/airweave-ai/airweave/blob/main/fern/docs/pages/search.mdx
+slug: search
+---
+
+## Instant Search
+
+`POST /collections/{id}/search/instant`
+
+Direct vector search. Use when speed is critical (~0.5sec).
+
+The only parameter unique to instant is `retrieval_strategy`, which controls how the vector database matches your query:
+
+- **`hybrid`** (default) — Combines semantic and keyword search via Reciprocal Rank Fusion. Best for most queries.
+- **`semantic`** — Dense vector cosine similarity. Finds conceptually similar content even when wording differs.
+- **`keyword`** — BM25 text matching. Only returns content with your exact terms. Use for error codes, identifiers, or known phrases.
+
+In classic and agentic search, the retrieval strategy is chosen automatically.
+
+## Classic Search
+
+`POST /collections/{id}/search/classic`
+
+AI-optimized search strategy. Sensible default for most use cases (~2sec).
+
+An LLM analyzes your query and generates an optimized search strategy.
+
+## Agentic Search
+
+`POST /collections/{id}/search/agentic`
+
+Agent that navigates through your collection to find the best results. Use when recall matters more than latency (&lt;2min).
+
+An AI agent iteratively searches your data using tool calling. It searches with multiple strategies, reads full documents, navigates entity hierarchies (parent/child/sibling), and builds a comprehensive result set.
+
+Two parameters unique to agentic:
+
+- **`thinking`** — Enables extended chain-of-thought reasoning before tool calls. Better search strategies, but slower and uses more tokens. Useful for complex or ambiguous queries.
+- **`limit`** — Unlike instant/classic where the vector database always returns up to `limit` results, the agent collects results based on relevance. It may return fewer if it decides there aren't enough matches. Setting a limit caps the maximum — if the agent collects more, results are truncated. When `null` (default), there is no cap.
+
+### Streaming
+
+`POST /collections/{id}/search/agentic/stream`
+
+Real-time SSE events as the agent works. Events are delivered as `data: {json}\n\n` messages. The stream terminates after a `done` or `error` event.
+
+<Accordion title="started">
+Emitted once when the search begins.
+
+```json
+{
+  "type": "started",
+  "request_id": "req-abc123",
+  "tier": "agentic",
+  "collection_readable_id": "my-collection",
+  "query": "What authentication methods do we support?",
+  "thinking": true,
+  "filter": null,
+  "limit": null
+}
+```
+</Accordion>
+
+<Accordion title="thinking">
+Emitted once per iteration after the LLM responds. `thinking` contains extended reasoning (when enabled), `text` contains conversational output before tool calls.
+
+```json
+{
+  "type": "thinking",
+  "thinking": "The user is asking about authentication methods. I should search for docs about auth, SSO, API keys...",
+  "text": "Searching for authentication documentation...",
+  "duration_ms": 2340,
+  "diagnostics": {
+    "iteration": 0,
+    "prompt_tokens": 4521,
+    "completion_tokens": 892
+  }
+}
+```
+</Accordion>
+
+<Accordion title="tool_call">
+Emitted after each tool the agent calls. `diagnostics.arguments` has the full tool input, `diagnostics.stats` has the output. The stats shape depends on which tool was called:
+
+<Accordion title="search">
+```json
+{
+  "type": "tool_call",
+  "tool_name": "search",
+  "duration_ms": 156,
+  "diagnostics": {
+    "iteration": 0,
+    "tool_call_id": "call_s1",
+    "arguments": {
+      "query": {
+        "primary": "authentication methods",
+        "variations": ["auth flow", "SSO setup"]
+      },
+      "retrieval_strategy": "hybrid",
+      "limit": 100,
+      "offset": 0,
+      "filter_groups": []
+    },
+    "stats": {
+      "result_count": 47,
+      "new_results": 47,
+      "first_results": [
+        {
+          "entity_id": "page-auth",
+          "name": "Authentication Overview",
+          "entity_type": "NotionPageEntity",
+          "source_name": "notion",
+          "relevance_score": 0.97
+        }
+      ]
+    }
+  }
+}
+```
+</Accordion>
+
+<Accordion title="read">
+```json
+{
+  "type": "tool_call",
+  "tool_name": "read",
+  "duration_ms": 42,
+  "diagnostics": {
+    "iteration": 1,
+    "tool_call_id": "call_r1",
+    "arguments": {
+      "entity_ids": ["page-auth", "page-oauth", "page-sso"]
+    },
+    "stats": {
+      "found": 3,
+      "not_found": 0,
+      "entities": [
+        {
+          "entity_id": "page-auth",
+          "name": "Authentication Overview",
+          "entity_type": "NotionPageEntity",
+          "source_name": "notion"
+        }
+      ],
+      "context_label": "3 entities, chunks 0-2"
+    }
+  }
+}
+```
+</Accordion>
+
+<Accordion title="add_to_results">
+```json
+{
+  "type": "tool_call",
+  "tool_name": "add_to_results",
+  "duration_ms": 1,
+  "diagnostics": {
+    "iteration": 1,
+    "tool_call_id": "call_a1",
+    "arguments": {
+      "entity_ids": ["page-auth", "page-oauth"]
+    },
+    "stats": {
+      "added": 2,
+      "already_collected": 0,
+      "not_found": 0,
+      "total_collected": 2
+    }
+  }
+}
+```
+</Accordion>
+
+<Accordion title="remove_from_results">
+```json
+{
+  "type": "tool_call",
+  "tool_name": "remove_from_results",
+  "duration_ms": 1,
+  "diagnostics": {
+    "iteration": 3,
+    "tool_call_id": "call_rm1",
+    "arguments": {
+      "entity_ids": ["page-unrelated"]
+    },
+    "stats": {
+      "added": 0,
+      "already_collected": 0,
+      "not_found": 0,
+      "total_collected": 5
+    }
+  }
+}
+```
+</Accordion>
+
+<Accordion title="count">
+```json
+{
+  "type": "tool_call",
+  "tool_name": "count",
+  "duration_ms": 23,
+  "diagnostics": {
+    "iteration": 0,
+    "tool_call_id": "call_c1",
+    "arguments": {
+      "filter_groups": [
+        {
+          "conditions": [
+            {
+              "field": "airweave_system_metadata.source_name",
+              "operator": "equals",
+              "value": "github"
+            }
+          ]
+        }
+      ]
+    },
+    "stats": {
+      "count": 312
+    }
+  }
+}
+```
+</Accordion>
+
+<Accordion title="get_children">
+```json
+{
+  "type": "tool_call",
+  "tool_name": "get_children",
+  "duration_ms": 67,
+  "diagnostics": {
+    "iteration": 2,
+    "tool_call_id": "call_gc1",
+    "arguments": {
+      "entity_id": "chan-engineering",
+      "limit": 50
+    },
+    "stats": {
+      "result_count": 34,
+      "context_label": "children of chan-engineering",
+      "first_results": [
+        {
+          "entity_id": "msg-001",
+          "name": "Auth migration plan",
+          "entity_type": "SlackMessageEntity",
+          "source_name": "slack"
+        }
+      ]
+    }
+  }
+}
+```
+</Accordion>
+
+<Accordion title="get_siblings">
+```json
+{
+  "type": "tool_call",
+  "tool_name": "get_siblings",
+  "duration_ms": 55,
+  "diagnostics": {
+    "iteration": 2,
+    "tool_call_id": "call_gs1",
+    "arguments": {
+      "entity_id": "page-oauth",
+      "limit": 50
+    },
+    "stats": {
+      "result_count": 8,
+      "context_label": "siblings of page-oauth under db-docs",
+      "first_results": [
+        {
+          "entity_id": "page-api-keys",
+          "name": "API Key Management",
+          "entity_type": "NotionPageEntity",
+          "source_name": "notion"
+        }
+      ]
+    }
+  }
+}
+```
+</Accordion>
+
+<Accordion title="get_parent">
+```json
+{
+  "type": "tool_call",
+  "tool_name": "get_parent",
+  "duration_ms": 18,
+  "diagnostics": {
+    "iteration": 2,
+    "tool_call_id": "call_gp1",
+    "arguments": {
+      "entity_id": "page-oauth"
+    },
+    "stats": {
+      "result_count": 1,
+      "context_label": "parent of page-oauth",
+      "first_results": [
+        {
+          "entity_id": "db-docs",
+          "name": "Documentation",
+          "entity_type": "NotionDatabaseEntity",
+          "source_name": "notion"
+        }
+      ]
+    }
+  }
+}
+```
+</Accordion>
+
+<Accordion title="review_results">
+```json
+{
+  "type": "tool_call",
+  "tool_name": "review_results",
+  "duration_ms": 2,
+  "diagnostics": {
+    "iteration": 4,
+    "tool_call_id": "call_rr1",
+    "arguments": {},
+    "stats": {
+      "total_collected": 12,
+      "entity_count": 12,
+      "first_results": [
+        {
+          "entity_id": "page-auth",
+          "name": "Authentication Overview",
+          "entity_type": "NotionPageEntity",
+          "source_name": "notion",
+          "relevance_score": 0.97
+        }
+      ]
+    }
+  }
+}
+```
+</Accordion>
+
+<Accordion title="return_results_to_user">
+```json
+{
+  "type": "tool_call",
+  "tool_name": "return_results_to_user",
+  "duration_ms": 1,
+  "diagnostics": {
+    "iteration": 5,
+    "tool_call_id": "call_ret1",
+    "arguments": {},
+    "stats": {
+      "accepted": true,
+      "total_collected": 12,
+      "warning": null
+    }
+  }
+}
+```
+</Accordion>
+
+</Accordion>
+
+<Accordion title="reranking">
+Emitted after the agent's collected results are reranked for final ordering.
+
+```json
+{
+  "type": "reranking",
+  "duration_ms": 890,
+  "diagnostics": {
+    "input_count": 12,
+    "output_count": 12,
+    "model": "cohere/rerank-v4.0-pro",
+    "top_relevance_score": 0.98,
+    "bottom_relevance_score": 0.41,
+    "first_results": [
+      {
+        "entity_id": "page-auth",
+        "name": "Authentication Overview",
+        "entity_type": "NotionPageEntity",
+        "source_name": "notion",
+        "relevance_score": 0.98
+      }
+    ]
+  }
+}
+```
+</Accordion>
+
+<Accordion title="done">
+Final event. Contains the full result set and run diagnostics.
+
+```json
+{
+  "type": "done",
+  "results": ["..."],
+  "duration_ms": 34521,
+  "diagnostics": {
+    "total_iterations": 6,
+    "all_seen_entity_ids": ["page-auth", "page-oauth", "page-sso", "..."],
+    "all_read_entity_ids": ["page-auth", "page-oauth", "page-sso"],
+    "all_collected_entity_ids": ["page-auth", "page-oauth", "pr-auth-456"],
+    "max_iterations_hit": false,
+    "total_llm_retries": 0,
+    "stagnation_nudges_sent": 0,
+    "prompt_tokens": 28450,
+    "completion_tokens": 5230,
+    "cache_creation_input_tokens": 12000,
+    "cache_read_input_tokens": 8500
+  }
+}
+```
+</Accordion>
+
+<Accordion title="error">
+Emitted when the search fails. Also terminates the stream.
+
+```json
+{
+  "type": "error",
+  "message": "Context window too full for useful work after emergency compression",
+  "duration_ms": 15230
+}
+```
+</Accordion>
+
+## Filters
+
+Filters constrain search results by metadata. They work across all three tiers.
+
+In classic and agentic search, the AI generates its own filters internally, your filters are **AND'd into every search** it performs, acting as constraints that cannot be bypassed.
+
+### Structure
+
+Filters use a two-level structure:
+- **Conditions** within a group are combined with **AND**
+- Multiple **groups** are combined with **OR**
+
+This allows expressions like: `(A AND B) OR (C AND D)`
+
+```json
+{
+  "filter": [
+    {
+      "conditions": [
+        { "field": "airweave_system_metadata.source_name", "operator": "equals", "value": "slack" },
+        { "field": "airweave_system_metadata.entity_type", "operator": "equals", "value": "SlackMessageEntity" }
+      ]
+    }
+  ]
+}
+```
+
+### Filterable Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `entity_id` | text | Entity identifier |
+| `name` | text | Entity display name |
+| `created_at` | date | Creation timestamp |
+| `updated_at` | date | Last update timestamp |
+| `breadcrumbs.entity_id` | text | Parent entity ID in the hierarchy |
+| `breadcrumbs.name` | text | Parent entity name |
+| `breadcrumbs.entity_type` | text | Parent entity type |
+| `airweave_system_metadata.entity_type` | text | Entity type (e.g., `SlackMessageEntity`) |
+| `airweave_system_metadata.source_name` | text | Source name (e.g., `slack`, `notion`) |
+| `airweave_system_metadata.original_entity_id` | text | Original entity ID (same across chunks) |
+| `airweave_system_metadata.chunk_index` | numeric | Chunk index for chunked documents |
+| `airweave_system_metadata.sync_id` | text | Sync ID |
+| `airweave_system_metadata.sync_job_id` | text | Sync job ID |
+
+### Operators
+
+| Operator | Works on | Description |
+|----------|----------|-------------|
+| `equals` | all | Exact match |
+| `not_equals` | all | Not equal |
+| `contains` | text only | Substring match |
+| `greater_than` | date, numeric | `>` |
+| `less_than` | date, numeric | `<` |
+| `greater_than_or_equal` | date, numeric | `>=` |
+| `less_than_or_equal` | date, numeric | `<=` |
+| `in` | all | Matches any value in the list |
+| `not_in` | all | Matches none of the values |
+
+### Examples
+
+**Filter by source:**
+
+```json
+{
+  "filter": [
+    {
+      "conditions": [
+        { "field": "airweave_system_metadata.source_name", "operator": "equals", "value": "github" }
+      ]
+    }
+  ]
+}
+```
+
+**Filter by time range (ISO 8601 timestamps required):**
+
+```json
+{
+  "filter": [
+    {
+      "conditions": [
+        { "field": "created_at", "operator": "greater_than_or_equal", "value": "2025-01-01T00:00:00Z" },
+        { "field": "created_at", "operator": "less_than", "value": "2025-02-01T00:00:00Z" }
+      ]
+    }
+  ]
+}
+```
+
+**Filter by multiple sources (using `in`):**
+
+```json
+{
+  "filter": [
+    {
+      "conditions": [
+        { "field": "airweave_system_metadata.source_name", "operator": "in", "value": ["slack", "notion", "github"] }
+      ]
+    }
+  ]
+}
+```
+
+**Combine groups with OR — Slack messages OR Notion pages:**
+
+```json
+{
+  "filter": [
+    {
+      "conditions": [
+        { "field": "airweave_system_metadata.source_name", "operator": "equals", "value": "slack" },
+        { "field": "airweave_system_metadata.entity_type", "operator": "equals", "value": "SlackMessageEntity" }
+      ]
+    },
+    {
+      "conditions": [
+        { "field": "airweave_system_metadata.source_name", "operator": "equals", "value": "notion" },
+        { "field": "airweave_system_metadata.entity_type", "operator": "equals", "value": "NotionPageEntity" }
+      ]
+    }
+  ]
+}
+```
+
+**Navigate hierarchy — find all entities inside a parent:**
+
+```json
+{
+  "filter": [
+    {
+      "conditions": [
+        { "field": "breadcrumbs.entity_id", "operator": "equals", "value": "parent-entity-id-here" }
+      ]
+    }
+  ]
+}
+```
+
+### Validation Rules
+
+- Date fields (`created_at`, `updated_at`) require ISO 8601 timestamps (e.g., `2025-01-15T00:00:00Z`)
+- Ordering operators (`greater_than`, `less_than`, etc.) only work on date and numeric fields
+- `contains` only works on text fields
+- `in` and `not_in` require array values
+- Scalar operators (`equals`, `contains`, etc.) require a single value, not an array
+
+
+## Response Format
+
+All three tiers return the same `SearchV2Response` with a `results` array. See the [API Reference](/api-reference/collections/instant-search) for the full response schema and interactive examples.

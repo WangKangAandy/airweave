@@ -1,0 +1,5633 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Airweave",
+    "version": "0.1.0",
+    "description": "\n\n## API Groups\nThis API spec only includes the following API groups:\n- **Sources**: API endpoints for discovering available data source connectors and their configuration requirements\n- **Collections**: API endpoints for managing collections - logical groups of data sources that provide unified search capabilities\n- **Source Connections**: API endpoints for managing live connections to data sources. Source connections are the actual configured instances that Airweave uses to sync data from your apps and databases, transforming it into searchable, structured information within collections\n- **Webhooks**: API endpoints for managing webhook subscriptions and messages. Subscribe to events like sync completions to receive real-time notifications at your webhook URL\n"
+  },
+  "paths": {
+    "/sources": {
+      "get": {
+        "tags": [
+          "sources"
+        ],
+        "summary": "List Sources",
+        "description": "Retrieve all available data source connectors.\n\nReturns the complete catalog of source types that Airweave can connect to,\nincluding their authentication methods, configuration requirements, and\nsupported features. Use this endpoint to discover which integrations are\navailable for your organization.\n\nEach source includes:\n- **Authentication methods**: How to connect (OAuth, API key, etc.)\n- **Configuration schemas**: What settings are required or optional\n- **Supported auth providers**: Pre-configured OAuth providers available",
+        "operationId": "list_sources_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Source"
+                  },
+                  "title": "Response List Sources Get"
+                },
+                "examples": {
+                  "available_sources": {
+                    "summary": "List of all available data source connectors",
+                    "value": [
+                      {
+                        "id": "550e8400-e29b-41d4-a716-446655440000",
+                        "name": "GitHub",
+                        "description": "Connect to GitHub repositories for code, issues, pull requests, and documentation",
+                        "auth_type": "config_class",
+                        "auth_config_class": "GitHubAuthConfig",
+                        "config_class": "GitHubConfig",
+                        "short_name": "github",
+                        "class_name": "GitHubSource",
+                        "output_entity_definition_ids": [
+                          "def12345-6789-abcd-ef01-234567890abc",
+                          "def67890-abcd-ef01-2345-67890abcdef1"
+                        ],
+                        "labels": [
+                          "code"
+                        ],
+                        "created_at": "2024-01-01T00:00:00Z",
+                        "modified_at": "2024-01-01T00:00:00Z",
+                        "auth_fields": {
+                          "fields": [
+                            {
+                              "name": "personal_access_token",
+                              "title": "Personal Access Token",
+                              "description": "GitHub Personal Access Token with repository read permissions",
+                              "type": "string",
+                              "secret": true
+                            },
+                            {
+                              "name": "repo_name",
+                              "title": "Repository Name",
+                              "description": "Full repository name in format 'owner/repo'",
+                              "type": "string"
+                            }
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate Limit Exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RateLimitErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/sources/{short_name}": {
+      "get": {
+        "tags": [
+          "sources"
+        ],
+        "summary": "Get Source",
+        "description": "Retrieve detailed information about a specific data source connector.\n\nReturns the complete configuration for a source type, including:\n\n- **Authentication fields**: Schema for credentials required to connect\n- **Configuration fields**: Schema for optional settings and customization\n- **Supported auth providers**: Pre-configured OAuth providers available for this source\n\nUse this endpoint before creating a source connection to understand what\nauthentication and configuration values are required.",
+        "operationId": "get_sources__short_name__get",
+        "parameters": [
+          {
+            "name": "short_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Technical identifier of the source type (e.g., 'github', 'stripe', 'slack')",
+              "example": "github",
+              "title": "Short Name"
+            },
+            "description": "Technical identifier of the source type (e.g., 'github', 'stripe', 'slack')"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Source"
+                },
+                "examples": {
+                  "github_source": {
+                    "summary": "Source details with authentication and configuration schemas",
+                    "value": {
+                      "id": "550e8400-e29b-41d4-a716-446655440000",
+                      "name": "GitHub",
+                      "description": "Connect to GitHub repositories for code, issues, pull requests, and documentation",
+                      "auth_type": "config_class",
+                      "auth_config_class": "GitHubAuthConfig",
+                      "config_class": "GitHubConfig",
+                      "short_name": "github",
+                      "class_name": "GitHubSource",
+                      "output_entity_definition_ids": [
+                        "def12345-6789-abcd-ef01-234567890abc",
+                        "def67890-abcd-ef01-2345-67890abcdef1"
+                      ],
+                      "labels": [
+                        "code"
+                      ],
+                      "created_at": "2024-01-01T00:00:00Z",
+                      "modified_at": "2024-01-01T00:00:00Z",
+                      "auth_fields": {
+                        "fields": [
+                          {
+                            "name": "personal_access_token",
+                            "title": "Personal Access Token",
+                            "description": "GitHub Personal Access Token with repository read permissions",
+                            "type": "string",
+                            "secret": true
+                          },
+                          {
+                            "name": "repo_name",
+                            "title": "Repository Name",
+                            "description": "Full repository name in format 'owner/repo'",
+                            "type": "string"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Source Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate Limit Exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RateLimitErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/collections": {
+      "get": {
+        "tags": [
+          "collections"
+        ],
+        "summary": "List Collections",
+        "description": "Retrieve all collections belonging to your organization.\n\nCollections are containers that group related data from one or more source\nconnections, enabling unified search across multiple data sources.\n\nResults are sorted by creation date (newest first) and support pagination\nand text search filtering.",
+        "operationId": "list_collections_get",
+        "parameters": [
+          {
+            "name": "skip",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Number of collections to skip for pagination",
+              "example": 0,
+              "default": 0,
+              "title": "Skip"
+            },
+            "description": "Number of collections to skip for pagination"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1000,
+              "minimum": 1,
+              "description": "Maximum number of collections to return (1-1000)",
+              "example": 100,
+              "default": 100,
+              "title": "Limit"
+            },
+            "description": "Maximum number of collections to return (1-1000)"
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Search term to filter collections by name or readable_id",
+              "example": "customer",
+              "title": "Search"
+            },
+            "description": "Search term to filter collections by name or readable_id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Collection"
+                  },
+                  "title": "Response List Collections Get"
+                },
+                "examples": {
+                  "collections_list": {
+                    "summary": "Finance data collection",
+                    "value": [
+                      {
+                        "id": "550e8400-e29b-41d4-a716-446655440000",
+                        "name": "Finance Data",
+                        "readable_id": "finance-data-ab123",
+                        "created_at": "2024-01-15T09:30:00Z",
+                        "modified_at": "2024-01-15T14:22:15Z",
+                        "organization_id": "org12345-6789-abcd-ef01-234567890abc",
+                        "created_by_email": "admin@company.com",
+                        "modified_by_email": "finance@company.com",
+                        "status": "ACTIVE"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate Limit Exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RateLimitErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "collections"
+        ],
+        "summary": "Create Collection",
+        "description": "Create a new collection in your organization.\n\nCollections are containers for organizing and searching across data from multiple\nsources. After creation, add source connections to begin syncing data.\n\nThe collection will be assigned a unique `readable_id` based on the name you provide,\nwhich is used in URLs and API calls. You can optionally configure:\n\n- **Sync schedule**: How frequently to automatically sync data from all sources\n- **Custom readable_id**: Provide your own identifier (must be unique and URL-safe)",
+        "operationId": "create_collections_post",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CollectionCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Created collection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Collection"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate Limit Exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RateLimitErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/collections/{readable_id}": {
+      "get": {
+        "tags": [
+          "collections"
+        ],
+        "summary": "Get Collection",
+        "description": "Retrieve details of a specific collection by its readable ID.\n\nReturns the complete collection configuration including sync settings, status,\nand metadata. Use this to check the current state of a collection or to get\nconfiguration details before making updates.",
+        "operationId": "get_collections__readable_id__get",
+        "parameters": [
+          {
+            "name": "readable_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The unique readable identifier of the collection (e.g., 'finance-data-ab123')",
+              "example": "customer-support-tickets-x7k9m",
+              "title": "Readable Id"
+            },
+            "description": "The unique readable identifier of the collection (e.g., 'finance-data-ab123')"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Collection details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Collection"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Collection Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate Limit Exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RateLimitErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "collections"
+        ],
+        "summary": "Update Collection",
+        "description": "Update an existing collection's properties.\n\nYou can modify:\n- **Name**: The display name shown in the UI\n- **Sync configuration**: Schedule settings for automatic data synchronization\n\nNote that the `readable_id` cannot be changed after creation to maintain stable\nAPI endpoints and preserve existing integrations.",
+        "operationId": "update_collections__readable_id__patch",
+        "parameters": [
+          {
+            "name": "readable_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The unique readable identifier of the collection to update",
+              "example": "customer-support-tickets-x7k9m",
+              "title": "Readable Id"
+            },
+            "description": "The unique readable identifier of the collection to update"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CollectionUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated collection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Collection"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Collection Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate Limit Exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RateLimitErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "collections"
+        ],
+        "summary": "Delete Collection",
+        "description": "Permanently delete a collection and all associated data.\n\nThis operation:\n- Removes all synced data from the vector database\n- Deletes all source connections within the collection\n- Cancels any scheduled sync jobs\n- Cleans up all related resources\n\n**Warning**: This action cannot be undone. All data will be permanently deleted.",
+        "operationId": "delete_collections__readable_id__delete",
+        "parameters": [
+          {
+            "name": "readable_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The unique readable identifier of the collection to delete",
+              "example": "customer-support-tickets-x7k9m",
+              "title": "Readable Id"
+            },
+            "description": "The unique readable identifier of the collection to delete"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted collection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Collection"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Collection Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate Limit Exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RateLimitErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/collections/{readable_id}/search/instant": {
+      "post": {
+        "tags": [
+          "collections"
+        ],
+        "summary": "Instant Search",
+        "description": "Direct vector search.",
+        "operationId": "instant_search_collections__readable_id__search_instant_post",
+        "parameters": [
+          {
+            "name": "readable_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Readable Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InstantSearchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchV2Response"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/collections/{readable_id}/search/classic": {
+      "post": {
+        "tags": [
+          "collections"
+        ],
+        "summary": "Classic Search",
+        "description": "AI-optimized search.",
+        "operationId": "classic_search_collections__readable_id__search_classic_post",
+        "parameters": [
+          {
+            "name": "readable_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Readable Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClassicSearchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchV2Response"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/collections/{readable_id}/search/agentic": {
+      "post": {
+        "tags": [
+          "collections"
+        ],
+        "summary": "Agentic Search",
+        "description": "Agent that iteratively searches, reads, navigates hierarchies, and collects results.",
+        "operationId": "agentic_search_collections__readable_id__search_agentic_post",
+        "parameters": [
+          {
+            "name": "readable_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Readable Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgenticSearchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchV2Response"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/collections/{readable_id}/search/agentic/stream": {
+      "post": {
+        "tags": [
+          "collections"
+        ],
+        "summary": "Stream Agentic Search",
+        "description": "Streaming agentic search via Server-Sent Events. Returns real-time events as the agent searches.",
+        "operationId": "stream_agentic_search_collections__readable_id__search_agentic_stream_post",
+        "parameters": [
+          {
+            "name": "readable_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Readable Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgenticSearchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/source-connections": {
+      "post": {
+        "tags": [
+          "source-connections"
+        ],
+        "summary": "Create Source Connection",
+        "description": "Create a new source connection to sync data from an external source.\n\nThe authentication method determines the creation flow:\n\n- **Direct**: Provide credentials (API key, token) directly. Connection is created immediately.\n- **OAuth Browser**: Returns a connection with an `auth_url` to redirect users for authentication.\n- **OAuth Token**: Provide an existing OAuth token. Connection is created immediately.\n- **Auth Provider**: Use a pre-configured auth provider (e.g., Composio, Pipedream).\n\nAfter successful authentication, data sync can begin automatically or on-demand.",
+        "operationId": "create_source_connections_post",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceConnectionCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Created source connection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceConnection"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate Limit Exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RateLimitErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      },
+      "get": {
+        "tags": [
+          "source-connections"
+        ],
+        "summary": "List Source Connections",
+        "description": "Retrieve all source connections for your organization.\n\nReturns a lightweight list of source connections with essential fields for\ndisplay and navigation. Use the collection filter to see connections within\na specific collection.\n\nFor full connection details including sync history, use the GET /{id} endpoint.",
+        "operationId": "list_source_connections_get",
+        "parameters": [
+          {
+            "name": "collection",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by collection readable ID",
+              "example": "customer-support-tickets-x7k9m",
+              "title": "Collection"
+            },
+            "description": "Filter by collection readable ID"
+          },
+          {
+            "name": "skip",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Number of connections to skip for pagination",
+              "example": 0,
+              "default": 0,
+              "title": "Skip"
+            },
+            "description": "Number of connections to skip for pagination"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1000,
+              "minimum": 1,
+              "description": "Maximum number of connections to return (1-1000)",
+              "example": 100,
+              "default": 100,
+              "title": "Limit"
+            },
+            "description": "Maximum number of connections to return (1-1000)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of source connections",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SourceConnectionListItem"
+                  },
+                  "title": "Response 200 List Source Connections Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate Limit Exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RateLimitErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/source-connections/{source_connection_id}": {
+      "get": {
+        "tags": [
+          "source-connections"
+        ],
+        "summary": "Get Source Connection",
+        "description": "Retrieve details of a specific source connection.\n\nReturns complete information about the connection including:\n- Configuration settings\n- Authentication status\n- Sync schedule and history\n- Entity statistics",
+        "operationId": "get_source_connections__source_connection_id__get",
+        "parameters": [
+          {
+            "name": "source_connection_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Unique identifier of the source connection (UUID)",
+              "example": "550e8400-e29b-41d4-a716-446655440000",
+              "title": "Source Connection Id"
+            },
+            "description": "Unique identifier of the source connection (UUID)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Source connection details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceConnection"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Source Connection Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate Limit Exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RateLimitErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "source-connections"
+        ],
+        "summary": "Update Source Connection",
+        "description": "Update an existing source connection's configuration.\n\nYou can modify:\n- **Name and description**: Display information\n- **Configuration**: Source-specific settings (e.g., repository name, filters)\n- **Schedule**: Cron expression for automatic syncs\n- **Authentication**: Update credentials (direct auth only)\n\nOnly include the fields you want to change; omitted fields retain their current values.",
+        "operationId": "update_source_connections__source_connection_id__patch",
+        "parameters": [
+          {
+            "name": "source_connection_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Unique identifier of the source connection to update (UUID)",
+              "example": "550e8400-e29b-41d4-a716-446655440000",
+              "title": "Source Connection Id"
+            },
+            "description": "Unique identifier of the source connection to update (UUID)"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceConnectionUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated source connection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceConnection"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Source Connection Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate Limit Exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RateLimitErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "source-connections"
+        ],
+        "summary": "Delete Source Connection",
+        "description": "Permanently delete a source connection and all its synced data.\n\n**What happens when you delete:**\n\n1. Any running sync is cancelled and the API waits (up to 15 s) for the\n   worker to stop writing.\n2. The source connection, sync configuration, job history, and entity\n   metadata are cascade-deleted from the database.\n3. A background cleanup workflow is scheduled to remove data from the\n   vector database (Vespa) and raw data storage (ARF). This may take\n   several minutes for large datasets but does **not** block the response.\n\nThe API returns immediately after step 2. Vector database cleanup happens\nasynchronously -- the data becomes unsearchable as soon as the database\nrecords are deleted.\n\n**Warning**: This action cannot be undone.",
+        "operationId": "delete_source_connections__source_connection_id__delete",
+        "parameters": [
+          {
+            "name": "source_connection_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Unique identifier of the source connection to delete (UUID)",
+              "example": "550e8400-e29b-41d4-a716-446655440000",
+              "title": "Source Connection Id"
+            },
+            "description": "Unique identifier of the source connection to delete (UUID)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted source connection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceConnection"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Source Connection Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate Limit Exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RateLimitErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/source-connections/{source_connection_id}/run": {
+      "post": {
+        "tags": [
+          "source-connections"
+        ],
+        "summary": "Run Sync",
+        "description": "Trigger a data synchronization job for a source connection.\n\nStarts an asynchronous sync job that pulls the latest data from the connected\nsource. The job runs in the background and you can monitor its progress using\nthe jobs endpoint.\n\nFor continuous sync connections, this performs an incremental sync by default.\nUse `force_full_sync=true` to perform a complete re-sync of all data.",
+        "operationId": "run_source_connections__source_connection_id__run_post",
+        "parameters": [
+          {
+            "name": "source_connection_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Unique identifier of the source connection to sync (UUID)",
+              "example": "550e8400-e29b-41d4-a716-446655440000",
+              "title": "Source Connection Id"
+            },
+            "description": "Unique identifier of the source connection to sync (UUID)"
+          },
+          {
+            "name": "force_full_sync",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Force a full sync ignoring cursor data. Only applies to continuous sync connections. Non-continuous connections always perform full syncs.",
+              "example": false,
+              "default": false,
+              "title": "Force Full Sync"
+            },
+            "description": "Force a full sync ignoring cursor data. Only applies to continuous sync connections. Non-continuous connections always perform full syncs."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Created sync job",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceConnectionJob"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Source Connection Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Sync Already Running",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConflictErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate Limit Exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RateLimitErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/source-connections/{source_connection_id}/jobs": {
+      "get": {
+        "tags": [
+          "source-connections"
+        ],
+        "summary": "List Sync Jobs",
+        "description": "Retrieve the sync job history for a source connection.\n\nReturns a list of sync jobs ordered by creation time (newest first). Each job\nincludes status, timing information, and entity counts.\n\nJob statuses:\n- **PENDING**: Job is queued, waiting for the worker to pick it up\n- **RUNNING**: Sync is actively pulling and processing data\n- **COMPLETED**: Sync finished successfully\n- **FAILED**: Sync encountered an unrecoverable error\n- **CANCELLING**: Cancellation has been requested. The worker is\n  gracefully stopping the pipeline and cleaning up destination data.\n- **CANCELLED**: Sync was cancelled. The worker has fully stopped\n  and destination data cleanup has been scheduled.",
+        "operationId": "get_source_connection_jobs_source_connections__source_connection_id__jobs_get",
+        "parameters": [
+          {
+            "name": "source_connection_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Unique identifier of the source connection (UUID)",
+              "example": "550e8400-e29b-41d4-a716-446655440000",
+              "title": "Source Connection Id"
+            },
+            "description": "Unique identifier of the source connection (UUID)"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1000,
+              "minimum": 1,
+              "description": "Maximum number of jobs to return (1-1000)",
+              "example": 100,
+              "default": 100,
+              "title": "Limit"
+            },
+            "description": "Maximum number of jobs to return (1-1000)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of sync jobs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SourceConnectionJob"
+                  },
+                  "title": "Response 200 Get Source Connection Jobs Source Connections  Source Connection Id  Jobs Get"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Source Connection Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate Limit Exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RateLimitErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/source-connections/{source_connection_id}/jobs/{job_id}/cancel": {
+      "post": {
+        "tags": [
+          "source-connections"
+        ],
+        "summary": "Cancel Sync Job",
+        "description": "Request cancellation of a running sync job.\n\n**State lifecycle**: `PENDING` / `RUNNING` \u2192 `CANCELLING` \u2192 `CANCELLED`\n\n1. The API immediately marks the job as **CANCELLING** in the database.\n2. A cancellation signal is sent to the Temporal workflow.\n3. The worker receives the signal, gracefully stops the sync pipeline\n   (cancels worker pool, source stream), and marks the job as **CANCELLED**.\n\nAlready-processed entities are retained in the vector database.\nIf the worker is unresponsive, a background cleanup job will force the\ntransition to CANCELLED after 3 minutes.\n\n**Note**: Only jobs in `PENDING` or `RUNNING` state can be cancelled.\nAttempting to cancel a `COMPLETED`, `FAILED`, or `CANCELLED` job returns 400.",
+        "operationId": "cancel_job_source_connections__source_connection_id__jobs__job_id__cancel_post",
+        "parameters": [
+          {
+            "name": "source_connection_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Unique identifier of the source connection (UUID)",
+              "example": "550e8400-e29b-41d4-a716-446655440000",
+              "title": "Source Connection Id"
+            },
+            "description": "Unique identifier of the source connection (UUID)"
+          },
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Unique identifier of the sync job to cancel (UUID)",
+              "example": "660e8400-e29b-41d4-a716-446655440001",
+              "title": "Job Id"
+            },
+            "description": "Unique identifier of the sync job to cancel (UUID)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Job with cancellation status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceConnectionJob"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Job Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Job Cannot Be Cancelled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConflictErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate Limit Exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RateLimitErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/webhooks/messages": {
+      "get": {
+        "tags": [
+          "webhooks"
+        ],
+        "summary": "List Messages",
+        "description": "Retrieve all webhook messages for your organization.\n\nWebhook messages represent payloads that were sent (or attempted to be sent)\nto your subscribed endpoints. Each message contains the event type, payload data,\nand delivery status information.\n\nUse the `event_types` query parameter to filter messages by specific event types,\nsuch as `sync.completed` or `sync.failed`.",
+        "operationId": "get_messages_webhooks_messages_get",
+        "parameters": [
+          {
+            "name": "event_types",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter messages by event type(s). Accepts multiple values, e.g., `?event_types=sync.completed&event_types=sync.failed`.",
+              "example": [
+                "sync.completed",
+                "sync.failed"
+              ],
+              "title": "Event Types"
+            },
+            "description": "Filter messages by event type(s). Accepts multiple values, e.g., `?event_types=sync.completed&event_types=sync.failed`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of webhook messages",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/WebhookMessage"
+                  },
+                  "title": "Response 200 Get Messages Webhooks Messages Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate Limit Exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RateLimitErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/webhooks/messages/{message_id}": {
+      "get": {
+        "tags": [
+          "webhooks"
+        ],
+        "summary": "Get Message",
+        "description": "Retrieve a specific webhook message by its ID.\n\nReturns the full message details including the event type, payload data,\ntimestamp, and delivery channel information. Use this to inspect the\nexact payload that was sent to your webhook endpoints.\n\nUse `include_attempts=true` to also retrieve delivery attempts for this message,\nwhich include HTTP response codes, response bodies, and timestamps for debugging\ndelivery failures.",
+        "operationId": "get_message_webhooks_messages__message_id__get",
+        "parameters": [
+          {
+            "name": "message_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The unique identifier of the message to retrieve (UUID).",
+              "example": "550e8400-e29b-41d4-a716-446655440000",
+              "title": "Message Id"
+            },
+            "description": "The unique identifier of the message to retrieve (UUID)."
+          },
+          {
+            "name": "include_attempts",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Include delivery attempts for this message. Each attempt includes the HTTP response code, response body, and timestamp.",
+              "default": false,
+              "title": "Include Attempts"
+            },
+            "description": "Include delivery attempts for this message. Each attempt includes the HTTP response code, response body, and timestamp."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Webhook message details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookMessageWithAttempts"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Message Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate Limit Exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RateLimitErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/webhooks/subscriptions": {
+      "get": {
+        "tags": [
+          "webhooks"
+        ],
+        "summary": "List Subscriptions",
+        "description": "List all webhook subscriptions for your organization.\n\nReturns all configured webhook endpoints, including their URLs, subscribed\nevent types, and current status (enabled/disabled). Use this to audit\nyour webhook configuration or find a specific subscription.",
+        "operationId": "get_subscriptions_webhooks_subscriptions_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "List of webhook subscriptions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/WebhookSubscription"
+                  },
+                  "title": "Response 200 Get Subscriptions Webhooks Subscriptions Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate Limit Exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RateLimitErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "webhooks"
+        ],
+        "summary": "Create Subscription",
+        "description": "Create a new webhook subscription.\n\nWebhook subscriptions allow you to receive real-time notifications when events\noccur in Airweave. When you create a subscription, you specify:\n\n- **URL**: The HTTPS endpoint where events will be delivered\n- **Event Types**: Which events you want to receive (e.g., `sync.completed`, `sync.failed`)\n- **Secret** (optional): A custom signing secret for verifying webhook signatures\n\nAfter creation, Airweave will send HTTP POST requests to your URL whenever\nmatching events occur. Each request includes a signature header for verification.",
+        "operationId": "create_subscription_webhooks_subscriptions_post",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSubscriptionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Created subscription",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookSubscription"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate Limit Exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RateLimitErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/webhooks/subscriptions/{subscription_id}": {
+      "get": {
+        "tags": [
+          "webhooks"
+        ],
+        "summary": "Get Subscription",
+        "description": "Retrieve a specific webhook subscription with its recent delivery attempts.\n\nReturns the subscription configuration along with a history of message delivery\nattempts. This is useful for debugging delivery issues or verifying that your\nendpoint is correctly receiving events.\n\nUse `include_secret=true` to also retrieve the signing secret for webhook\nsignature verification. Keep this secret secure.",
+        "operationId": "get_subscription_webhooks_subscriptions__subscription_id__get",
+        "parameters": [
+          {
+            "name": "subscription_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The unique identifier of the subscription to retrieve (UUID).",
+              "example": "550e8400-e29b-41d4-a716-446655440000",
+              "title": "Subscription Id"
+            },
+            "description": "The unique identifier of the subscription to retrieve (UUID)."
+          },
+          {
+            "name": "include_secret",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Include the signing secret for webhook signature verification. Keep this secret secure and use it to verify the 'svix-signature' header.",
+              "default": false,
+              "title": "Include Secret"
+            },
+            "description": "Include the signing secret for webhook signature verification. Keep this secret secure and use it to verify the 'svix-signature' header."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Subscription with delivery attempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookSubscriptionDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Subscription Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate Limit Exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RateLimitErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "webhooks"
+        ],
+        "summary": "Delete Subscription",
+        "description": "Permanently delete a webhook subscription.\n\nOnce deleted, Airweave will stop sending events to this endpoint immediately.\nThis action cannot be undone. Any pending message deliveries will be cancelled.\n\nIf you want to temporarily stop receiving events, consider disabling the\nsubscription instead using the PATCH endpoint.",
+        "operationId": "delete_subscription_webhooks_subscriptions__subscription_id__delete",
+        "parameters": [
+          {
+            "name": "subscription_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The unique identifier of the subscription to delete (UUID).",
+              "example": "550e8400-e29b-41d4-a716-446655440000",
+              "title": "Subscription Id"
+            },
+            "description": "The unique identifier of the subscription to delete (UUID)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted subscription",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookSubscription"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Subscription Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate Limit Exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RateLimitErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "webhooks"
+        ],
+        "summary": "Update Subscription",
+        "description": "Update an existing webhook subscription.\n\nUse this endpoint to modify a subscription's configuration. You can:\n\n- **Change the URL**: Update where events are delivered\n- **Update event types**: Modify which events trigger notifications\n- **Enable/disable**: Temporarily pause delivery without deleting the subscription\n- **Recover messages**: When re-enabling, optionally recover missed messages\n\nOnly include the fields you want to change. Omitted fields will retain their\ncurrent values.\n\nWhen re-enabling a subscription (`disabled: false`), you can optionally provide\n`recover_since` to automatically retry all messages that were generated while\nthe subscription was disabled.",
+        "operationId": "patch_subscription_webhooks_subscriptions__subscription_id__patch",
+        "parameters": [
+          {
+            "name": "subscription_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The unique identifier of the subscription to update (UUID).",
+              "example": "550e8400-e29b-41d4-a716-446655440000",
+              "title": "Subscription Id"
+            },
+            "description": "The unique identifier of the subscription to update (UUID)."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchSubscriptionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated subscription",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookSubscription"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Subscription Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate Limit Exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RateLimitErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/webhooks/subscriptions/{subscription_id}/recover": {
+      "post": {
+        "tags": [
+          "webhooks"
+        ],
+        "summary": "Recover Failed Messages",
+        "description": "Retry failed message deliveries for a webhook subscription.\n\nTriggers a recovery process that replays all failed messages within the\nspecified time window. This is useful when:\n\n- Your endpoint was temporarily down and you want to catch up\n- You've fixed a bug in your webhook handler\n- You want to reprocess events after re-enabling a disabled subscription\n\nMessages are retried in chronological order. Successfully delivered messages\nare skipped; only failed or pending messages are retried.",
+        "operationId": "recover_failed_messages_webhooks_subscriptions__subscription_id__recover_post",
+        "parameters": [
+          {
+            "name": "subscription_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The unique identifier of the subscription to recover messages for (UUID).",
+              "example": "550e8400-e29b-41d4-a716-446655440000",
+              "title": "Subscription Id"
+            },
+            "description": "The unique identifier of the subscription to recover messages for (UUID)."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecoverMessagesRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Recovery task information",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecoveryTask"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Subscription Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate Limit Exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RateLimitErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AgenticSearchRequest": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "title": "Query",
+            "description": "Search query text."
+          },
+          "thinking": {
+            "type": "boolean",
+            "title": "Thinking",
+            "description": "Enable extended thinking / chain-of-thought.",
+            "default": false
+          },
+          "filter": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FilterGroup"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filter",
+            "description": "Filter groups (combined with OR)."
+          },
+          "limit": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limit",
+            "description": "Max results. None means agent decides."
+          }
+        },
+        "type": "object",
+        "required": [
+          "query"
+        ],
+        "title": "AgenticSearchRequest",
+        "description": "Agentic search request \u2014 full agent loop with tool calling."
+      },
+      "AuthProviderAuthentication": {
+        "properties": {
+          "provider_readable_id": {
+            "type": "string",
+            "title": "Provider Readable Id",
+            "description": "Auth provider readable ID"
+          },
+          "provider_config": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Config",
+            "description": "Provider-specific configuration"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "provider_readable_id"
+        ],
+        "title": "AuthProviderAuthentication",
+        "description": "Authentication via external provider."
+      },
+      "AuthenticationDetails": {
+        "properties": {
+          "method": {
+            "$ref": "#/components/schemas/AuthenticationMethod"
+          },
+          "authenticated": {
+            "type": "boolean",
+            "title": "Authenticated"
+          },
+          "authenticated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authenticated At"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "auth_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auth Url",
+            "description": "For pending OAuth flows"
+          },
+          "auth_url_expires": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auth Url Expires"
+          },
+          "redirect_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Redirect Url"
+          },
+          "claim_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claim Token",
+            "description": "One-time token to verify OAuth flow ownership. Only returned when creating an OAuth browser connection."
+          },
+          "provider_readable_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Readable Id"
+          },
+          "provider_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "method",
+          "authenticated"
+        ],
+        "title": "AuthenticationDetails",
+        "description": "Authentication information."
+      },
+      "AuthenticationMethod": {
+        "type": "string",
+        "enum": [
+          "direct",
+          "oauth_browser",
+          "oauth_token",
+          "oauth_byoc",
+          "auth_provider"
+        ],
+        "title": "AuthenticationMethod",
+        "description": "Authentication methods for source connections."
+      },
+      "BehaviorConfig": {
+        "properties": {
+          "skip_hash_comparison": {
+            "type": "boolean",
+            "title": "Skip Hash Comparison",
+            "description": "Force INSERT for all entities",
+            "default": false
+          },
+          "replay_from_arf": {
+            "type": "boolean",
+            "title": "Replay From Arf",
+            "description": "Replay from ARF storage instead of calling source",
+            "default": false
+          },
+          "skip_guardrails": {
+            "type": "boolean",
+            "title": "Skip Guardrails",
+            "description": "Skip usage guardrails (entity count checks)",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "BehaviorConfig",
+        "description": "Miscellaneous execution behavior flags."
+      },
+      "ClassicSearchRequest": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "title": "Query",
+            "description": "Search query text."
+          },
+          "filter": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FilterGroup"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filter",
+            "description": "Filter groups (combined with OR)."
+          },
+          "limit": {
+            "type": "integer",
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "description": "Max results to return.",
+            "default": 100
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Offset",
+            "description": "Number of results to skip.",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "query"
+        ],
+        "title": "ClassicSearchRequest",
+        "description": "Classic search request \u2014 LLM generates a search plan, execute against Vespa."
+      },
+      "Collection": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Human-readable display name for the collection."
+          },
+          "readable_id": {
+            "type": "string",
+            "title": "Readable Id",
+            "description": "URL-safe unique identifier used in API endpoints. This becomes non-optional once the collection is created."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id",
+            "description": "Unique system identifier for the collection. This UUID is generated automatically and used for internal references."
+          },
+          "sync_config": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SyncConfig"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Default sync configuration for all syncs in this collection. Overridable at sync and job level."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At",
+            "description": "Timestamp when the collection was created (ISO 8601 format)."
+          },
+          "modified_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Modified At",
+            "description": "Timestamp when the collection was last modified (ISO 8601 format)."
+          },
+          "organization_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Organization Id",
+            "description": "Identifier of the organization that owns this collection. Collections are isolated per organization."
+          },
+          "created_by_email": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "email"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Email",
+            "description": "Email address of the user who created this collection."
+          },
+          "modified_by_email": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "email"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modified By Email",
+            "description": "Email address of the user who last modified this collection."
+          },
+          "status": {
+            "$ref": "#/components/schemas/CollectionStatus",
+            "description": "Current operational status of the collection:<br/>\u2022 **NEEDS_SOURCE**: Collection has no authenticated connections, or connections exist but haven't synced yet<br/>\u2022 **ACTIVE**: At least one connection has completed a sync or is currently syncing<br/>\u2022 **ERROR**: All connections have failed their last sync",
+            "default": "NEEDS SOURCE"
+          },
+          "vector_size": {
+            "type": "integer",
+            "title": "Vector Size",
+            "description": "Vector dimensions used by this collection (derived from deployment metadata)."
+          },
+          "embedding_model_name": {
+            "type": "string",
+            "title": "Embedding Model Name",
+            "description": "Name of the embedding model used for this collection (derived from deployment metadata)."
+          },
+          "source_connection_summaries": {
+            "items": {
+              "$ref": "#/components/schemas/SourceConnectionSummary"
+            },
+            "type": "array",
+            "title": "Source Connection Summaries",
+            "description": "Lightweight list of source connections attached to this collection. Contains only short_name and name, suitable for rendering icons in list views."
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "readable_id",
+          "id",
+          "created_at",
+          "modified_at",
+          "organization_id",
+          "vector_size",
+          "embedding_model_name"
+        ],
+        "title": "Collection",
+        "description": "API-facing collection schema with embedding metadata.\n\nExtends CollectionRecord with vector_size and embedding_model_name, which\nare resolved by the CollectionService from the deployment metadata and the\ndense embedder registry.\n\nExcludes vector_db_deployment_metadata_id (internal FK).",
+        "example": {
+          "created_at": "2024-01-15T09:30:00Z",
+          "created_by_email": "admin@company.com",
+          "embedding_model_name": "text-embedding-3-large",
+          "id": "550e8400-e29b-41d4-a716-446655440000",
+          "modified_at": "2024-01-15T14:22:15Z",
+          "modified_by_email": "finance@company.com",
+          "name": "Finance Data",
+          "organization_id": "org12345-6789-abcd-ef01-234567890abc",
+          "readable_id": "finance-data-ab123",
+          "source_connection_summaries": [
+            {
+              "name": "Slack",
+              "short_name": "slack"
+            },
+            {
+              "name": "GitHub",
+              "short_name": "github"
+            }
+          ],
+          "status": "ACTIVE",
+          "vector_size": 3072
+        }
+      },
+      "CollectionCreate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 4,
+            "title": "Name",
+            "description": "Human-readable display name for the collection. This appears in the UI and should clearly describe the data contained within (e.g., 'Finance Data').",
+            "examples": [
+              "Finance Data",
+              "Customer Support",
+              "Marketing Analytics"
+            ]
+          },
+          "readable_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Readable Id",
+            "description": "URL-safe unique identifier used in API endpoints. Must contain only lowercase letters, numbers, and hyphens. If not provided, it will be automatically generated from the collection name with a random suffix for uniqueness (e.g., 'finance-data-ab123').",
+            "examples": [
+              "finance-data-ab123",
+              "customer-support-xy789",
+              "marketing-analytics-cd456"
+            ]
+          },
+          "sync_config": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SyncConfig"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Default sync configuration for all syncs in this collection. This provides collection-level defaults that can be overridden at sync or job level."
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "CollectionCreate",
+        "description": "Schema for creating a new collection.\n\nCollections serve as logical containers for organizing related data sources.\nOnce created, you can add source connections to populate the collection with data\nfrom various sources like databases, APIs, and file systems.\n\nYou can optionally set a default sync configuration that will apply to all syncs\nwithin this collection unless overridden at the sync or job level.",
+        "examples": [
+          {
+            "name": "Finance Data",
+            "readable_id": "finance-data-reports"
+          },
+          {
+            "name": "Customer Support"
+          },
+          {
+            "name": "ARF Test Collection",
+            "sync_config": {
+              "handlers": {
+                "enable_postgres_handler": false,
+                "enable_vector_handlers": false
+              }
+            }
+          }
+        ]
+      },
+      "CollectionStatus": {
+        "type": "string",
+        "enum": [
+          "ACTIVE",
+          "NEEDS SOURCE",
+          "ERROR"
+        ],
+        "title": "CollectionStatus",
+        "description": "Collection status enum."
+      },
+      "CollectionUpdate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64,
+                "minLength": 4
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name",
+            "description": "Updated display name for the collection. Must be between 4 and 64 characters."
+          },
+          "sync_config": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SyncConfig"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Default sync configuration for all syncs in this collection. This provides collection-level defaults that can be overridden at sync or job level."
+          }
+        },
+        "type": "object",
+        "title": "CollectionUpdate",
+        "description": "Schema for updating an existing collection.\n\nAllows updating the collection's display name and default sync configuration.\nThe readable_id is immutable to maintain stable API endpoints and references.",
+        "examples": [
+          {
+            "name": "Updated Finance Data"
+          },
+          {
+            "name": "Marketing Analytics - Q1 2024",
+            "sync_config": {
+              "handlers": {
+                "enable_vector_handlers": true
+              }
+            }
+          },
+          {
+            "name": "Customer Support Archive"
+          }
+        ]
+      },
+      "ConfigField": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "required": {
+            "type": "boolean",
+            "title": "Required",
+            "default": true
+          },
+          "items_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Items Type"
+          },
+          "feature_flag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feature Flag"
+          },
+          "is_secret": {
+            "type": "boolean",
+            "title": "Is Secret",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "title",
+          "type"
+        ],
+        "title": "ConfigField",
+        "description": "Config field model."
+      },
+      "ConflictErrorResponse": {
+        "properties": {
+          "detail": {
+            "type": "string",
+            "title": "Detail",
+            "description": "Error message describing the conflict",
+            "example": "A resource with this identifier already exists"
+          }
+        },
+        "type": "object",
+        "required": [
+          "detail"
+        ],
+        "title": "ConflictErrorResponse",
+        "description": "Response returned when a resource conflict occurs (HTTP 409).\n\nThis typically occurs when attempting to create a resource that already exists,\nor when an operation cannot be completed due to the current state of a resource.",
+        "example": {
+          "detail": "A resource with this identifier already exists"
+        }
+      },
+      "CreateSubscriptionRequest": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "maxLength": 2083,
+            "minLength": 1,
+            "format": "uri",
+            "title": "Url",
+            "description": "The HTTPS URL where webhook events will be delivered. Must be a publicly accessible endpoint that returns a 2xx status code.",
+            "example": "https://api.mycompany.com/webhooks/airweave"
+          },
+          "event_types": {
+            "items": {
+              "$ref": "#/components/schemas/EventType"
+            },
+            "type": "array",
+            "title": "Event Types",
+            "description": "List of event types to subscribe to. Events not in this list will not be delivered to this subscription. Available types: `sync.pending`, `sync.running`, `sync.completed`, `sync.failed`, `sync.cancelled`, `source_connection.created`, `source_connection.auth_completed`, `source_connection.deleted`, `collection.created`, `collection.updated`, `collection.deleted`.",
+            "example": [
+              "sync.completed",
+              "sync.failed"
+            ]
+          },
+          "secret": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 24
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Secret",
+            "description": "Optional custom signing secret for webhook signature verification. If not provided, a secure secret will be auto-generated. Must be at least 24 characters if specified.",
+            "example": "whsec_C2FVsBQIhrscChlQIMV10R9X4jZ8"
+          }
+        },
+        "type": "object",
+        "required": [
+          "url",
+          "event_types"
+        ],
+        "title": "CreateSubscriptionRequest",
+        "description": "Create a new webhook subscription.\n\nWebhook subscriptions define where Airweave should send event notifications.\nYou can subscribe to specific event types to receive only the events you care about.",
+        "example": {
+          "event_types": [
+            "sync.completed",
+            "sync.failed"
+          ],
+          "url": "https://api.mycompany.com/webhooks/airweave"
+        }
+      },
+      "CursorConfig": {
+        "properties": {
+          "skip_load": {
+            "type": "boolean",
+            "title": "Skip Load",
+            "description": "Don't load cursor (fetch all entities)",
+            "default": false
+          },
+          "skip_updates": {
+            "type": "boolean",
+            "title": "Skip Updates",
+            "description": "Don't persist cursor progress",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "CursorConfig",
+        "description": "Controls incremental sync cursor behavior."
+      },
+      "DeliveryAttempt": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Unique identifier for this delivery attempt",
+            "example": "atmpt_2bVxUn3RFnLYHa8z6ZKHMT9PqPX"
+          },
+          "message_id": {
+            "type": "string",
+            "title": "Message Id",
+            "description": "The event message that was being delivered",
+            "example": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+          },
+          "endpoint_id": {
+            "type": "string",
+            "title": "Endpoint Id",
+            "description": "The subscription endpoint this was delivered to",
+            "example": "c3d4e5f6-a7b8-9012-cdef-345678901234"
+          },
+          "response": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Response",
+            "description": "The response body returned by your webhook endpoint (truncated to 1KB)",
+            "example": "{\"status\": \"processed\", \"id\": \"evt_123\"}"
+          },
+          "response_status_code": {
+            "type": "integer",
+            "title": "Response Status Code",
+            "description": "HTTP status code returned by your webhook endpoint. 2xx codes indicate success; other codes trigger retries.",
+            "example": 200
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "Delivery status: `success` (2xx response), `pending` (awaiting delivery), or `failed` (non-2xx response or timeout)",
+            "example": "success"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Timestamp",
+            "description": "When this delivery attempt occurred (ISO 8601 format, UTC)",
+            "example": "2024-03-15T09:45:33Z"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url",
+            "description": "The URL that was called"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "message_id",
+          "endpoint_id",
+          "response_status_code",
+          "status",
+          "timestamp"
+        ],
+        "title": "DeliveryAttempt",
+        "description": "A delivery attempt for a webhook message.\n\nEach time Airweave attempts to deliver a message to your webhook endpoint,\na delivery attempt is recorded. Failed attempts are automatically retried\nwith exponential backoff.",
+        "examples": [
+          {
+            "summary": "Successful Delivery",
+            "value": {
+              "endpoint_id": "c3d4e5f6-a7b8-9012-cdef-345678901234",
+              "id": "atmpt_2bVxUn3RFnLYHa8z6ZKHMT9PqPX",
+              "message_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+              "response": "{\"status\": \"processed\", \"id\": \"evt_123\"}",
+              "response_status_code": 200,
+              "status": "success",
+              "timestamp": "2024-03-15T09:45:33Z"
+            }
+          },
+          {
+            "summary": "Failed Delivery",
+            "value": {
+              "endpoint_id": "c3d4e5f6-a7b8-9012-cdef-345678901234",
+              "id": "atmpt_3cWyVo4SGmMZb9a7ALINT0QrQYQ",
+              "message_id": "b2c3d4e5-f6a7-8901-bcde-f23456789012",
+              "response": "Internal Server Error",
+              "response_status_code": 500,
+              "status": "failed",
+              "timestamp": "2024-03-15T10:12:05Z"
+            }
+          }
+        ]
+      },
+      "DestinationConfig": {
+        "properties": {
+          "skip_vespa": {
+            "type": "boolean",
+            "title": "Skip Vespa",
+            "description": "Skip writing to native Vespa",
+            "default": false
+          },
+          "target_destinations": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Destinations",
+            "description": "If set, ONLY write to these destination UUIDs"
+          },
+          "exclude_destinations": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exclude Destinations",
+            "description": "Skip these destination UUIDs"
+          }
+        },
+        "type": "object",
+        "title": "DestinationConfig",
+        "description": "Controls where entities are written."
+      },
+      "DirectAuthentication": {
+        "properties": {
+          "credentials": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Credentials",
+            "description": "Authentication credentials"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "credentials"
+        ],
+        "title": "DirectAuthentication",
+        "description": "Direct authentication with API keys or passwords."
+      },
+      "EntitySummary": {
+        "properties": {
+          "total_entities": {
+            "type": "integer",
+            "title": "Total Entities",
+            "default": 0
+          },
+          "by_type": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/EntityTypeStats"
+            },
+            "type": "object",
+            "title": "By Type"
+          }
+        },
+        "type": "object",
+        "title": "EntitySummary",
+        "description": "Entity state summary."
+      },
+      "EntityTypeStats": {
+        "properties": {
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          },
+          "last_updated": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Updated"
+          }
+        },
+        "type": "object",
+        "required": [
+          "count"
+        ],
+        "title": "EntityTypeStats",
+        "description": "Statistics for a specific entity type."
+      },
+      "EventType": {
+        "type": "string",
+        "enum": [
+          "sync.pending",
+          "sync.running",
+          "sync.completed",
+          "sync.failed",
+          "sync.cancelled",
+          "entity.batch_processed",
+          "query.processed",
+          "access_control.batch_processed",
+          "collection.created",
+          "collection.updated",
+          "collection.deleted",
+          "source_connection.created",
+          "source_connection.auth_completed",
+          "source_connection.deleted",
+          "organization.created",
+          "organization.deleted",
+          "organization.member_added",
+          "organization.member_removed",
+          "search.started",
+          "search.completed",
+          "search.failed",
+          "search.reranking",
+          "search.thinking",
+          "search.tool_called"
+        ],
+        "title": "EventType"
+      },
+      "Fields": {
+        "properties": {
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/ConfigField"
+            },
+            "type": "array",
+            "title": "Fields"
+          }
+        },
+        "type": "object",
+        "required": [
+          "fields"
+        ],
+        "title": "Fields",
+        "description": "Fields model."
+      },
+      "FilterCondition": {
+        "properties": {
+          "field": {
+            "$ref": "#/components/schemas/FilterableField",
+            "description": "Field to filter on (use dot notation for nested fields)."
+          },
+          "operator": {
+            "$ref": "#/components/schemas/FilterOperator",
+            "description": "The comparison operator to use."
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              }
+            ],
+            "title": "Value",
+            "description": "Value to compare against. Use a list for 'in' and 'not_in' operators."
+          }
+        },
+        "type": "object",
+        "required": [
+          "field",
+          "operator",
+          "value"
+        ],
+        "title": "FilterCondition",
+        "description": "A single filter condition.\n\nPydantic validates that:\n- ``field`` is a valid FilterableField enum value\n- ``operator`` is a valid FilterOperator enum value\n- ``value`` matches the expected types\n- The combination of field + operator + value is semantically valid\n\nInvalid filters raise ``pydantic.ValidationError`` automatically.\n\nExamples:\n    {\"field\": \"airweave_system_metadata.source_name\", \"operator\": \"equals\",\n     \"value\": \"notion\"}\n    {\"field\": \"created_at\", \"operator\": \"greater_than\",\n     \"value\": \"2024-01-01T00:00:00Z\"}\n    {\"field\": \"breadcrumbs.name\", \"operator\": \"contains\", \"value\": \"Engineering\"}"
+      },
+      "FilterGroup": {
+        "properties": {
+          "conditions": {
+            "items": {
+              "$ref": "#/components/schemas/FilterCondition"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Conditions",
+            "description": "Filter conditions within this group, combined with AND"
+          }
+        },
+        "type": "object",
+        "required": [
+          "conditions"
+        ],
+        "title": "FilterGroup",
+        "description": "A group of filter conditions combined with AND.\n\nMultiple filter groups are combined with OR, allowing expressions like:\n(A AND B) OR (C AND D)\n\nExamples:\n    Single group (AND):\n        {\"conditions\": [\n            {\"field\": \"airweave_system_metadata.source_name\",\n             \"operator\": \"equals\", \"value\": \"slack\"},\n            {\"field\": \"airweave_system_metadata.entity_type\",\n             \"operator\": \"equals\", \"value\": \"SlackMessageEntity\"}\n        ]}\n\n    Multiple groups (OR between groups, AND within):\n        [\n            {\"conditions\": [{\"field\": \"name\", \"operator\": \"equals\",\n                             \"value\": \"doc1\"}]},\n            {\"conditions\": [{\"field\": \"name\", \"operator\": \"equals\",\n                             \"value\": \"doc2\"}]}\n        ]\n\n    Breadcrumb filtering:\n        {\"conditions\": [\n            {\"field\": \"breadcrumbs.name\", \"operator\": \"contains\",\n             \"value\": \"Engineering\"}\n        ]}"
+      },
+      "FilterOperator": {
+        "type": "string",
+        "enum": [
+          "equals",
+          "not_equals",
+          "contains",
+          "greater_than",
+          "less_than",
+          "greater_than_or_equal",
+          "less_than_or_equal",
+          "in",
+          "not_in"
+        ],
+        "title": "FilterOperator",
+        "description": "Supported filter operators."
+      },
+      "FilterableField": {
+        "type": "string",
+        "enum": [
+          "entity_id",
+          "name",
+          "created_at",
+          "updated_at",
+          "breadcrumbs.entity_id",
+          "breadcrumbs.name",
+          "breadcrumbs.entity_type",
+          "airweave_system_metadata.entity_type",
+          "airweave_system_metadata.source_name",
+          "airweave_system_metadata.original_entity_id",
+          "airweave_system_metadata.chunk_index",
+          "airweave_system_metadata.sync_id",
+          "airweave_system_metadata.sync_job_id"
+        ],
+        "title": "FilterableField",
+        "description": "Filterable fields in search.\n\nUses dot notation for nested fields (e.g., breadcrumbs.name,\nairweave_system_metadata.source_name)."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HandlerConfig": {
+        "properties": {
+          "enable_vector_handlers": {
+            "type": "boolean",
+            "title": "Enable Vector Handlers",
+            "description": "Enable VectorDBHandler",
+            "default": true
+          },
+          "enable_raw_data_handler": {
+            "type": "boolean",
+            "title": "Enable Raw Data Handler",
+            "description": "Enable RawDataHandler (ARF)",
+            "default": true
+          },
+          "enable_postgres_handler": {
+            "type": "boolean",
+            "title": "Enable Postgres Handler",
+            "description": "Enable EntityPostgresHandler",
+            "default": true
+          }
+        },
+        "type": "object",
+        "title": "HandlerConfig",
+        "description": "Controls which handlers run during sync."
+      },
+      "HealthStatus": {
+        "type": "string",
+        "enum": [
+          "healthy",
+          "degraded",
+          "failing",
+          "unknown"
+        ],
+        "title": "HealthStatus",
+        "description": "Health status of a webhook subscription based on recent delivery attempts."
+      },
+      "InstantSearchRequest": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "title": "Query",
+            "description": "Search query text."
+          },
+          "retrieval_strategy": {
+            "$ref": "#/components/schemas/airweave__domains__search__types__plan__RetrievalStrategy",
+            "description": "Which retrieval strategy to use.",
+            "default": "hybrid"
+          },
+          "filter": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FilterGroup"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filter",
+            "description": "Filter groups (combined with OR)."
+          },
+          "limit": {
+            "type": "integer",
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "description": "Max results to return.",
+            "default": 100
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Offset",
+            "description": "Number of results to skip.",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "query"
+        ],
+        "title": "InstantSearchRequest",
+        "description": "Instant search request \u2014 embed query, fire at Vespa, return results."
+      },
+      "NotFoundErrorResponse": {
+        "properties": {
+          "detail": {
+            "type": "string",
+            "title": "Detail",
+            "description": "Error message describing what was not found",
+            "example": "Resource not found"
+          }
+        },
+        "type": "object",
+        "required": [
+          "detail"
+        ],
+        "title": "NotFoundErrorResponse",
+        "description": "Response returned when a resource is not found (HTTP 404).",
+        "example": {
+          "detail": "Resource not found"
+        }
+      },
+      "OAuthBrowserAuthentication": {
+        "properties": {
+          "redirect_uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Redirect Uri",
+            "description": "OAuth redirect URI"
+          },
+          "client_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Id",
+            "description": "OAuth2 client ID (for custom apps)"
+          },
+          "client_secret": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Secret",
+            "description": "OAuth2 client secret (for custom apps)"
+          },
+          "consumer_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Consumer Key",
+            "description": "OAuth1 consumer key (for custom apps)"
+          },
+          "consumer_secret": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Consumer Secret",
+            "description": "OAuth1 consumer secret (for custom apps)"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "OAuthBrowserAuthentication",
+        "description": "OAuth authentication via browser flow.\n\nSupports both OAuth2 and OAuth1 BYOC (Bring Your Own Client):\n- OAuth2 BYOC: Provide client_id + client_secret\n- OAuth1 BYOC: Provide consumer_key + consumer_secret"
+      },
+      "OAuthTokenAuthentication": {
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "title": "Access Token",
+            "description": "OAuth access token"
+          },
+          "refresh_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refresh Token",
+            "description": "OAuth refresh token"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At",
+            "description": "Token expiry time"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "access_token"
+        ],
+        "title": "OAuthTokenAuthentication",
+        "description": "OAuth authentication with pre-obtained token."
+      },
+      "PatchSubscriptionRequest": {
+        "properties": {
+          "url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2083,
+                "minLength": 1,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url",
+            "description": "New URL for webhook delivery. Must be a publicly accessible HTTPS endpoint.",
+            "example": "https://api.mycompany.com/webhooks/airweave-v2"
+          },
+          "event_types": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/EventType"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Types",
+            "description": "New list of event types to subscribe to. This replaces the existing list entirely.",
+            "example": [
+              "sync.completed",
+              "sync.failed",
+              "sync.running"
+            ]
+          },
+          "disabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disabled",
+            "description": "Set to `true` to pause delivery to this subscription, or `false` to resume. Disabled subscriptions will not receive events.",
+            "example": false
+          },
+          "recover_since": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recover Since",
+            "description": "When re-enabling a subscription (`disabled: false`), optionally recover failed messages from this timestamp. Only applies when enabling.",
+            "example": "2024-03-14T00:00:00Z"
+          }
+        },
+        "type": "object",
+        "title": "PatchSubscriptionRequest",
+        "description": "Update an existing webhook subscription.\n\nAll fields are optional. Only provided fields will be updated;\nomitted fields retain their current values.\n\nWhen re-enabling a subscription (setting `disabled: false`), you can optionally\nprovide `recover_since` to replay messages that were missed while disabled.",
+        "examples": [
+          {
+            "summary": "Update event types",
+            "value": {
+              "event_types": [
+                "sync.completed",
+                "sync.failed",
+                "sync.running"
+              ]
+            }
+          },
+          {
+            "summary": "Disable subscription",
+            "value": {
+              "disabled": true
+            }
+          },
+          {
+            "summary": "Enable subscription",
+            "value": {
+              "disabled": false
+            }
+          },
+          {
+            "summary": "Enable with message recovery",
+            "value": {
+              "disabled": false,
+              "recover_since": "2024-03-14T00:00:00Z"
+            }
+          },
+          {
+            "summary": "Change URL",
+            "value": {
+              "url": "https://api.mycompany.com/webhooks/airweave-v2"
+            }
+          }
+        ]
+      },
+      "RateLimitErrorResponse": {
+        "properties": {
+          "detail": {
+            "type": "string",
+            "title": "Detail",
+            "description": "Error message explaining the rate limit",
+            "example": "Rate limit exceeded. Please retry after 60 seconds."
+          }
+        },
+        "type": "object",
+        "required": [
+          "detail"
+        ],
+        "title": "RateLimitErrorResponse",
+        "description": "Response returned when rate limit is exceeded (HTTP 429).\n\nThe API enforces rate limits to ensure fair usage. When exceeded,\nwait for the duration specified in the Retry-After header before retrying.",
+        "example": {
+          "detail": "Rate limit exceeded. Please retry after 60 seconds."
+        }
+      },
+      "RecoverMessagesRequest": {
+        "properties": {
+          "since": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Since",
+            "description": "Start of the recovery time window (inclusive). All failed messages from this time onward will be retried.",
+            "example": "2024-03-14T00:00:00Z"
+          },
+          "until": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Until",
+            "description": "End of the recovery time window (exclusive). If not specified, recovers all failed messages up to now.",
+            "example": "2024-03-15T00:00:00Z"
+          }
+        },
+        "type": "object",
+        "required": [
+          "since"
+        ],
+        "title": "RecoverMessagesRequest",
+        "description": "Request to retry failed message deliveries.\n\nUse this to replay events that failed to deliver during a specific time window,\nfor example after fixing an issue with your webhook endpoint.",
+        "examples": [
+          {
+            "summary": "Recover last 24 hours",
+            "value": {
+              "since": "2024-03-14T00:00:00Z",
+              "until": "2024-03-15T00:00:00Z"
+            }
+          },
+          {
+            "summary": "Recover from timestamp to now",
+            "value": {
+              "since": "2024-03-14T12:00:00Z"
+            }
+          }
+        ]
+      },
+      "RecoveryTask": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Unique identifier for this recovery task (Svix internal ID)",
+            "example": "rcvr_2bVxUn3RFnLYHa8z6ZKHMT9PqPX"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "Recovery task status: 'running' or 'completed'",
+            "example": "running"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "status"
+        ],
+        "title": "RecoveryTask",
+        "description": "Information about a message recovery task.\n\nWhen you trigger a recovery of failed messages, this object is returned\nto track the recovery progress. The status indicates whether the recovery\nis still in progress or has completed.",
+        "example": {
+          "id": "rcvr_2bVxUn3RFnLYHa8z6ZKHMT9PqPX",
+          "status": "running"
+        }
+      },
+      "ScheduleConfig": {
+        "properties": {
+          "cron": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cron",
+            "description": "Cron expression for scheduled syncs"
+          },
+          "continuous": {
+            "type": "boolean",
+            "title": "Continuous",
+            "description": "Enable continuous sync mode",
+            "default": false
+          },
+          "cursor_field": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cursor Field",
+            "description": "Field for incremental sync"
+          }
+        },
+        "type": "object",
+        "title": "ScheduleConfig",
+        "description": "Schedule configuration for syncs."
+      },
+      "ScheduleDetails": {
+        "properties": {
+          "cron": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cron"
+          },
+          "next_run": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Run"
+          },
+          "continuous": {
+            "type": "boolean",
+            "title": "Continuous",
+            "default": false
+          },
+          "cursor_field": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cursor Field"
+          },
+          "cursor_value": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cursor Value"
+          }
+        },
+        "type": "object",
+        "title": "ScheduleDetails",
+        "description": "Schedule information."
+      },
+      "SearchAccessControl": {
+        "properties": {
+          "viewers": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Viewers",
+            "description": "Principal IDs who can view this entity. None if unknown."
+          },
+          "is_public": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Public",
+            "description": "Whether this entity is publicly accessible. None if unknown."
+          }
+        },
+        "type": "object",
+        "title": "SearchAccessControl",
+        "description": "Access control in search result."
+      },
+      "SearchBreadcrumb": {
+        "properties": {
+          "entity_id": {
+            "type": "string",
+            "title": "Entity Id",
+            "description": "ID of the entity in the source."
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Display name of the entity."
+          },
+          "entity_type": {
+            "type": "string",
+            "title": "Entity Type",
+            "description": "Entity class name (e.g., 'AsanaProjectEntity')."
+          }
+        },
+        "type": "object",
+        "required": [
+          "entity_id",
+          "name",
+          "entity_type"
+        ],
+        "title": "SearchBreadcrumb",
+        "description": "Breadcrumb in search result."
+      },
+      "SearchResult": {
+        "properties": {
+          "entity_id": {
+            "type": "string",
+            "title": "Entity Id",
+            "description": "Original entity ID."
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Entity display name."
+          },
+          "relevance_score": {
+            "type": "number",
+            "title": "Relevance Score",
+            "description": "Relevance score from the search engine."
+          },
+          "breadcrumbs": {
+            "items": {
+              "$ref": "#/components/schemas/SearchBreadcrumb"
+            },
+            "type": "array",
+            "title": "Breadcrumbs",
+            "description": "Breadcrumbs showing entity hierarchy."
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At",
+            "description": "When the entity was created."
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At",
+            "description": "When the entity was last updated."
+          },
+          "textual_representation": {
+            "type": "string",
+            "title": "Textual Representation",
+            "description": "Semantically searchable text content"
+          },
+          "airweave_system_metadata": {
+            "$ref": "#/components/schemas/SearchSystemMetadata",
+            "description": "System metadata"
+          },
+          "access": {
+            "$ref": "#/components/schemas/SearchAccessControl",
+            "description": "Access control"
+          },
+          "web_url": {
+            "type": "string",
+            "title": "Web Url",
+            "description": "URL to view the entity in its source application (e.g., Notion, Asana)."
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url",
+            "description": "Download URL for file entities. Only present for FileEntity types."
+          },
+          "raw_source_fields": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Raw Source Fields",
+            "description": "All source-specific fields."
+          }
+        },
+        "type": "object",
+        "required": [
+          "entity_id",
+          "name",
+          "relevance_score",
+          "breadcrumbs",
+          "textual_representation",
+          "airweave_system_metadata",
+          "access",
+          "web_url",
+          "raw_source_fields"
+        ],
+        "title": "SearchResult",
+        "description": "Search result."
+      },
+      "SearchSystemMetadata": {
+        "properties": {
+          "source_name": {
+            "type": "string",
+            "title": "Source Name",
+            "description": "Name of the source this entity belongs to."
+          },
+          "entity_type": {
+            "type": "string",
+            "title": "Entity Type",
+            "description": "Type of the entity this entity represents in the source."
+          },
+          "sync_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sync Id",
+            "description": "ID of the sync this entity belongs to (None for federated)."
+          },
+          "sync_job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sync Job Id",
+            "description": "ID of the sync job this entity belongs to (None for federated)."
+          },
+          "chunk_index": {
+            "type": "integer",
+            "title": "Chunk Index",
+            "description": "Index of the chunk in the file."
+          },
+          "original_entity_id": {
+            "type": "string",
+            "title": "Original Entity Id",
+            "description": "Original entity ID"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_name",
+          "entity_type",
+          "chunk_index",
+          "original_entity_id"
+        ],
+        "title": "SearchSystemMetadata",
+        "description": "System metadata in search result."
+      },
+      "SearchV2Response": {
+        "properties": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/SearchResult"
+            },
+            "type": "array",
+            "title": "Results",
+            "description": "Search results ordered by relevance."
+          }
+        },
+        "type": "object",
+        "title": "SearchV2Response",
+        "description": "Unified response for all search tiers.",
+        "examples": [
+          {
+            "results": [
+              {
+                "access": {},
+                "airweave_system_metadata": {
+                  "chunk_index": 0,
+                  "entity_type": "NotionPageEntity",
+                  "original_entity_id": "page-abc123",
+                  "source_name": "notion",
+                  "sync_id": "d4e5f6a7-b8c9-4d0e-1f2a-3b4c5d6e7f80",
+                  "sync_job_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+                },
+                "breadcrumbs": [
+                  {
+                    "entity_id": "ws-1",
+                    "entity_type": "NotionWorkspaceEntity",
+                    "name": "Acme Workspace"
+                  },
+                  {
+                    "entity_id": "db-eng",
+                    "entity_type": "NotionDatabaseEntity",
+                    "name": "Engineering"
+                  }
+                ],
+                "created_at": "2025-02-10T09:15:00Z",
+                "entity_id": "page-abc123",
+                "name": "Production Deployment Guide",
+                "raw_source_fields": {
+                  "archived": false,
+                  "icon": "\ud83d\ude80",
+                  "parent_type": "database_id"
+                },
+                "relevance_score": 0.94,
+                "textual_representation": "# Production Deployment Guide\n\nThis document covers the standard deployment process for production releases.",
+                "updated_at": "2025-03-18T16:30:00Z",
+                "web_url": "https://notion.so/Deployment-Guide-abc123"
+              },
+              {
+                "access": {},
+                "airweave_system_metadata": {
+                  "chunk_index": 0,
+                  "entity_type": "SlackMessageEntity",
+                  "original_entity_id": "msg-def456",
+                  "source_name": "slack",
+                  "sync_id": "e5f6a7b8-c9d0-4e1f-2a3b-4c5d6e7f8091",
+                  "sync_job_id": "b2c3d4e5-f6a7-8901-bcde-f12345678901"
+                },
+                "breadcrumbs": [
+                  {
+                    "entity_id": "team-1",
+                    "entity_type": "SlackWorkspaceEntity",
+                    "name": "Acme"
+                  },
+                  {
+                    "entity_id": "chan-eng",
+                    "entity_type": "SlackChannelEntity",
+                    "name": "#engineering"
+                  }
+                ],
+                "created_at": "2025-03-15T11:22:00Z",
+                "entity_id": "msg-def456",
+                "name": "Deployment checklist update",
+                "raw_source_fields": {
+                  "channel_name": "#engineering",
+                  "username": "alice"
+                },
+                "relevance_score": 0.87,
+                "textual_representation": "Updated the deployment checklist to include the new canary step. Make sure to verify metrics before promoting to 100%.",
+                "updated_at": "2025-03-15T11:22:00Z",
+                "web_url": "https://acme.slack.com/archives/C0123ABC/p1710500520"
+              }
+            ]
+          }
+        ]
+      },
+      "Source": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Human-readable name of the data source connector (e.g., 'GitHub', 'Stripe', 'PostgreSQL')."
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description",
+            "description": "Detailed description explaining what data this source can extract and its typical use cases."
+          },
+          "auth_methods": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auth Methods",
+            "description": "List of supported authentication methods (e.g., 'direct', 'oauth_browser')."
+          },
+          "oauth_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oauth Type",
+            "description": "OAuth token type for OAuth sources (e.g., 'access_only', 'with_refresh')."
+          },
+          "requires_byoc": {
+            "type": "boolean",
+            "title": "Requires Byoc",
+            "description": "Whether this OAuth source requires users to bring their own client.",
+            "default": false
+          },
+          "auth_config_class": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auth Config Class",
+            "description": "Python class name that defines the authentication configuration fields required for this source (only for DIRECT auth)."
+          },
+          "config_class": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Config Class",
+            "description": "Python class name that defines the source-specific configuration options and parameters."
+          },
+          "short_name": {
+            "type": "string",
+            "title": "Short Name",
+            "description": "Technical identifier used internally to reference this source type. Must be unique across all sources."
+          },
+          "class_name": {
+            "type": "string",
+            "title": "Class Name",
+            "description": "Python class name of the source implementation that handles data extraction logic."
+          },
+          "output_entity_definitions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Output Entity Definitions",
+            "description": "List of entity definition short names that this source can produce (e.g., ['asana_task_entity', 'asana_project_entity'])."
+          },
+          "labels": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Labels",
+            "description": "Categorization tags to help users discover and filter sources by domain or use case."
+          },
+          "supports_continuous": {
+            "type": "boolean",
+            "title": "Supports Continuous",
+            "description": "Whether this source supports cursor-based continuous syncing for incremental data extraction.",
+            "default": false
+          },
+          "federated_search": {
+            "type": "boolean",
+            "title": "Federated Search",
+            "description": "Whether this source uses federated search instead of traditional syncing.",
+            "default": false
+          },
+          "supports_temporal_relevance": {
+            "type": "boolean",
+            "title": "Supports Temporal Relevance",
+            "description": "Whether this source's entities have timestamps that enable recency-based ranking.",
+            "default": true
+          },
+          "supports_access_control": {
+            "type": "boolean",
+            "title": "Supports Access Control",
+            "description": "Whether this source supports document-level access control.",
+            "default": false
+          },
+          "rate_limit_level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rate Limit Level",
+            "description": "Rate limiting level for this source: 'org' (organization-wide), 'connection' (per-connection/per-user), or None (no rate limiting)."
+          },
+          "feature_flag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feature Flag",
+            "description": "Feature flag required to access this source. If set, only organizations with this feature enabled can see/use this source."
+          },
+          "supports_browse_tree": {
+            "type": "boolean",
+            "title": "Supports Browse Tree",
+            "description": "Whether this source supports lazy-loaded browse tree for selective node syncing.",
+            "default": false
+          },
+          "auth_fields": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Fields"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Schema definition for authentication fields required to connect to this source."
+          },
+          "config_fields": {
+            "$ref": "#/components/schemas/Fields",
+            "description": "Schema definition for configuration fields required to customize this source."
+          },
+          "supported_auth_providers": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supported Auth Providers",
+            "description": "List of auth provider short names that support this source."
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "short_name",
+          "class_name",
+          "config_fields"
+        ],
+        "title": "Source",
+        "description": "Complete source representation with authentication and configuration schemas.\n\nServed from the in-memory SourceRegistry \u2014 no database row needed."
+      },
+      "SourceConnection": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id",
+            "description": "Unique identifier of the source connection",
+            "example": "550e8400-e29b-41d4-a716-446655440000"
+          },
+          "organization_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Organization Id",
+            "description": "Organization this connection belongs to",
+            "example": "123e4567-e89b-12d3-a456-426614174000"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Display name of the connection",
+            "example": "GitHub Docs Repo"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description",
+            "description": "Optional description of the connection's purpose",
+            "example": "Main documentation repository"
+          },
+          "short_name": {
+            "type": "string",
+            "title": "Short Name",
+            "description": "Source type identifier",
+            "example": "github"
+          },
+          "readable_collection_id": {
+            "type": "string",
+            "title": "Readable Collection Id",
+            "description": "Collection this connection belongs to",
+            "example": "documentation-ab123"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SourceConnectionStatus",
+            "description": "Current operational status of the connection",
+            "example": "ACTIVE"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At",
+            "description": "When the connection was created (ISO 8601)",
+            "example": "2024-03-15T09:30:00Z"
+          },
+          "modified_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Modified At",
+            "description": "When the connection was last modified (ISO 8601)",
+            "example": "2024-03-15T14:22:15Z"
+          },
+          "auth": {
+            "$ref": "#/components/schemas/AuthenticationDetails",
+            "description": "Authentication status and details"
+          },
+          "config": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Config",
+            "description": "Source-specific configuration values",
+            "example": {
+              "branch": "main",
+              "repo_name": "company/docs"
+            }
+          },
+          "schedule": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScheduleDetails"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Sync schedule configuration"
+          },
+          "sync": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SyncDetails"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Sync execution history and statistics"
+          },
+          "sync_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sync Id",
+            "description": "ID of the associated sync (internal use)",
+            "example": "660e8400-e29b-41d4-a716-446655440001"
+          },
+          "entities": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EntitySummary"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Summary of synced entities by type"
+          },
+          "federated_search": {
+            "type": "boolean",
+            "title": "Federated Search",
+            "description": "Whether this source uses federated (real-time) search instead of syncing",
+            "default": false,
+            "example": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "organization_id",
+          "name",
+          "short_name",
+          "readable_collection_id",
+          "status",
+          "created_at",
+          "modified_at",
+          "auth"
+        ],
+        "title": "SourceConnection",
+        "description": "Complete source connection details including auth, config, sync status, and entities.\n\nThis schema provides full information about a source connection, suitable for\ndetail views and monitoring sync progress.",
+        "example": {
+          "auth": {
+            "authenticated": true,
+            "authenticated_at": "2024-03-15T09:30:00Z",
+            "method": "direct"
+          },
+          "config": {
+            "branch": "main",
+            "repo_name": "company/docs"
+          },
+          "created_at": "2024-03-15T09:30:00Z",
+          "description": "Main documentation repository",
+          "entities": {
+            "by_type": {
+              "file": {
+                "count": 1250
+              }
+            },
+            "total_entities": 1250
+          },
+          "federated_search": false,
+          "id": "550e8400-e29b-41d4-a716-446655440000",
+          "modified_at": "2024-03-15T14:22:15Z",
+          "name": "GitHub Docs Repo",
+          "readable_collection_id": "documentation-ab123",
+          "schedule": {
+            "cron": "0 */6 * * *",
+            "next_run": "2024-03-15T18:00:00Z"
+          },
+          "short_name": "github",
+          "status": "ACTIVE",
+          "sync": {
+            "failed_runs": 1,
+            "last_job": {
+              "completed_at": "2024-03-15T12:05:32Z",
+              "duration_seconds": 332,
+              "entities_inserted": 45,
+              "entities_updated": 12,
+              "id": "770e8400-e29b-41d4-a716-446655440002",
+              "started_at": "2024-03-15T12:00:00Z",
+              "status": "COMPLETED"
+            },
+            "successful_runs": 14,
+            "total_runs": 15
+          }
+        }
+      },
+      "SourceConnectionCreate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 42,
+                "minLength": 4
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name",
+            "description": "Display name for the connection. If not provided, defaults to '{Source Name} Connection'.",
+            "example": "My GitHub Connection"
+          },
+          "short_name": {
+            "type": "string",
+            "title": "Short Name",
+            "description": "Source type identifier (e.g., 'slack', 'github', 'notion')",
+            "example": "github"
+          },
+          "readable_collection_id": {
+            "type": "string",
+            "title": "Readable Collection Id",
+            "description": "The readable ID of the collection to add this connection to",
+            "example": "customer-support-tickets-x7k9m"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description",
+            "description": "Optional description of what this connection is used for",
+            "example": "Production GitHub repository for documentation"
+          },
+          "config": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Config",
+            "description": "Source-specific configuration (e.g., repository name, filters)",
+            "example": {
+              "branch": "main",
+              "repo_name": "airweave-ai/airweave"
+            }
+          },
+          "schedule": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScheduleConfig"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional sync schedule configuration"
+          },
+          "sync_immediately": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sync Immediately",
+            "description": "Run initial sync after creation. Defaults to True for direct/token/auth_provider, False for OAuth browser/BYOC flows (which sync after authentication)",
+            "example": true
+          },
+          "authentication": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DirectAuthentication"
+              },
+              {
+                "$ref": "#/components/schemas/OAuthTokenAuthentication"
+              },
+              {
+                "$ref": "#/components/schemas/OAuthBrowserAuthentication"
+              },
+              {
+                "$ref": "#/components/schemas/AuthProviderAuthentication"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authentication",
+            "description": "Authentication configuration. Type is auto-detected from provided fields."
+          },
+          "redirect_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Redirect Url",
+            "description": "URL to redirect to after OAuth flow completes (only used for OAuth flows)",
+            "example": "https://app.example.com/connections"
+          }
+        },
+        "type": "object",
+        "required": [
+          "short_name",
+          "readable_collection_id"
+        ],
+        "title": "SourceConnectionCreate",
+        "description": "Create a source connection with authentication configuration.\n\nSource connections link a data source (e.g., GitHub, Slack) to a collection.\nThe authentication method determines how credentials are provided and whether\nthe connection is created immediately or requires an OAuth flow.",
+        "examples": [
+          {
+            "summary": "Direct auth (API key)",
+            "value": {
+              "authentication": {
+                "credentials": {
+                  "personal_access_token": "ghp_xxxxxxxxxxxx"
+                }
+              },
+              "config": {
+                "branch": "main",
+                "repo_name": "company/docs"
+              },
+              "name": "GitHub Docs Repo",
+              "readable_collection_id": "documentation-ab123",
+              "short_name": "github"
+            }
+          },
+          {
+            "summary": "OAuth browser flow",
+            "value": {
+              "name": "Slack Workspace",
+              "readable_collection_id": "team-comms-xy789",
+              "redirect_url": "https://app.example.com/connections",
+              "short_name": "slack"
+            }
+          },
+          {
+            "summary": "Auth provider",
+            "value": {
+              "authentication": {
+                "provider_readable_id": "composio-abc123"
+              },
+              "name": "Gmail via Composio",
+              "readable_collection_id": "emails-cd456",
+              "short_name": "gmail"
+            }
+          }
+        ]
+      },
+      "SourceConnectionJob": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id",
+            "description": "Unique identifier of the sync job",
+            "example": "770e8400-e29b-41d4-a716-446655440002"
+          },
+          "source_connection_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Source Connection Id",
+            "description": "ID of the source connection this job belongs to",
+            "example": "550e8400-e29b-41d4-a716-446655440000"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SyncJobStatus",
+            "description": "Current status: PENDING, RUNNING, COMPLETED, FAILED, CANCELLED, or CANCELLING",
+            "example": "COMPLETED"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At",
+            "description": "When the job started execution (ISO 8601)",
+            "example": "2024-03-15T12:00:00Z"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At",
+            "description": "When the job finished (ISO 8601). Null if still running.",
+            "example": "2024-03-15T12:05:32Z"
+          },
+          "duration_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Seconds",
+            "description": "Total execution time in seconds. Null if still running.",
+            "example": 332.5
+          },
+          "entities_inserted": {
+            "type": "integer",
+            "title": "Entities Inserted",
+            "description": "Number of new entities created during this sync",
+            "default": 0,
+            "example": 45
+          },
+          "entities_updated": {
+            "type": "integer",
+            "title": "Entities Updated",
+            "description": "Number of existing entities updated during this sync",
+            "default": 0,
+            "example": 12
+          },
+          "entities_deleted": {
+            "type": "integer",
+            "title": "Entities Deleted",
+            "description": "Number of entities removed during this sync",
+            "default": 0,
+            "example": 3
+          },
+          "entities_failed": {
+            "type": "integer",
+            "title": "Entities Failed",
+            "description": "Number of entities that failed to process",
+            "default": 0,
+            "example": 0
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error",
+            "description": "Error message if the job failed"
+          },
+          "error_details": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Details",
+            "description": "Additional error context for debugging"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "source_connection_id",
+          "status"
+        ],
+        "title": "SourceConnectionJob",
+        "description": "A sync job representing a single synchronization run.\n\nSync jobs track the execution of data synchronization from a source connection.\nEach job includes timing information, entity counts, and error details if applicable.",
+        "example": {
+          "completed_at": "2024-03-15T12:05:32Z",
+          "duration_seconds": 332.5,
+          "entities_deleted": 3,
+          "entities_failed": 0,
+          "entities_inserted": 45,
+          "entities_updated": 12,
+          "id": "770e8400-e29b-41d4-a716-446655440002",
+          "source_connection_id": "550e8400-e29b-41d4-a716-446655440000",
+          "started_at": "2024-03-15T12:00:00Z",
+          "status": "COMPLETED"
+        }
+      },
+      "SourceConnectionListItem": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id",
+            "description": "Unique identifier of the source connection",
+            "example": "550e8400-e29b-41d4-a716-446655440000"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Display name of the connection",
+            "example": "GitHub Docs Repo"
+          },
+          "short_name": {
+            "type": "string",
+            "title": "Short Name",
+            "description": "Source type identifier",
+            "example": "github"
+          },
+          "readable_collection_id": {
+            "type": "string",
+            "title": "Readable Collection Id",
+            "description": "Collection this connection belongs to",
+            "example": "documentation-ab123"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At",
+            "description": "When the connection was created (ISO 8601)",
+            "example": "2024-03-15T09:30:00Z"
+          },
+          "modified_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Modified At",
+            "description": "When the connection was last modified (ISO 8601)",
+            "example": "2024-03-15T14:22:15Z"
+          },
+          "is_authenticated": {
+            "type": "boolean",
+            "title": "Is Authenticated",
+            "description": "Whether the connection has valid credentials",
+            "example": true
+          },
+          "entity_count": {
+            "type": "integer",
+            "title": "Entity Count",
+            "description": "Total number of entities synced from this connection",
+            "default": 0,
+            "example": 1250
+          },
+          "federated_search": {
+            "type": "boolean",
+            "title": "Federated Search",
+            "description": "Whether this source uses federated (real-time) search instead of syncing",
+            "default": false,
+            "example": false
+          },
+          "auth_method": {
+            "$ref": "#/components/schemas/AuthenticationMethod",
+            "description": "Get authentication method from database value.",
+            "readOnly": true
+          },
+          "status": {
+            "$ref": "#/components/schemas/SourceConnectionStatus",
+            "description": "Compute connection status from current state.",
+            "readOnly": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "short_name",
+          "readable_collection_id",
+          "created_at",
+          "modified_at",
+          "is_authenticated",
+          "auth_method",
+          "status"
+        ],
+        "title": "SourceConnectionListItem",
+        "description": "Lightweight source connection representation for list views.\n\nContains essential fields for display and navigation. For full details\nincluding sync history and configuration, use the GET /{id} endpoint.",
+        "example": {
+          "auth_method": "direct",
+          "created_at": "2024-03-15T09:30:00Z",
+          "entity_count": 1250,
+          "federated_search": false,
+          "id": "550e8400-e29b-41d4-a716-446655440000",
+          "is_authenticated": true,
+          "modified_at": "2024-03-15T14:22:15Z",
+          "name": "GitHub Docs Repo",
+          "readable_collection_id": "documentation-ab123",
+          "short_name": "github",
+          "status": "ACTIVE"
+        }
+      },
+      "SourceConnectionStatus": {
+        "type": "string",
+        "enum": [
+          "active",
+          "pending_auth",
+          "syncing",
+          "error",
+          "inactive",
+          "pending_sync"
+        ],
+        "title": "SourceConnectionStatus",
+        "description": "Source connection status enum - represents overall connection state."
+      },
+      "SourceConnectionSummary": {
+        "properties": {
+          "short_name": {
+            "type": "string",
+            "title": "Short Name"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "short_name",
+          "name"
+        ],
+        "title": "SourceConnectionSummary",
+        "description": "Lightweight summary of a source connection for collection list display."
+      },
+      "SourceConnectionUpdate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 42,
+                "minLength": 4
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name",
+            "description": "Updated display name for the connection",
+            "example": "Production GitHub Repo"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description",
+            "description": "Updated description",
+            "example": "Main production repository"
+          },
+          "config": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Config",
+            "description": "Updated source-specific configuration",
+            "example": {
+              "branch": "develop",
+              "repo_name": "company/new-repo"
+            }
+          },
+          "schedule": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScheduleConfig"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Updated sync schedule configuration"
+          },
+          "authentication": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DirectAuthentication"
+              },
+              {
+                "$ref": "#/components/schemas/OAuthTokenAuthentication"
+              },
+              {
+                "$ref": "#/components/schemas/OAuthBrowserAuthentication"
+              },
+              {
+                "$ref": "#/components/schemas/AuthProviderAuthentication"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authentication",
+            "description": "Updated authentication credentials (direct auth only)"
+          }
+        },
+        "type": "object",
+        "title": "SourceConnectionUpdate",
+        "description": "Update an existing source connection's configuration.\n\nAll fields are optional. Only include fields you want to change;\nomitted fields retain their current values.",
+        "examples": [
+          {
+            "summary": "Update name",
+            "value": {
+              "name": "Updated Connection Name"
+            }
+          },
+          {
+            "summary": "Update config",
+            "value": {
+              "config": {
+                "branch": "main",
+                "repo_name": "company/new-repo"
+              }
+            }
+          },
+          {
+            "summary": "Update schedule",
+            "value": {
+              "schedule": {
+                "cron": "0 */6 * * *"
+              }
+            }
+          }
+        ]
+      },
+      "SyncConfig": {
+        "properties": {
+          "destinations": {
+            "$ref": "#/components/schemas/DestinationConfig"
+          },
+          "handlers": {
+            "$ref": "#/components/schemas/HandlerConfig"
+          },
+          "cursor": {
+            "$ref": "#/components/schemas/CursorConfig"
+          },
+          "behavior": {
+            "$ref": "#/components/schemas/BehaviorConfig"
+          }
+        },
+        "type": "object",
+        "title": "SyncConfig",
+        "description": "Sync configuration with automatic env var loading.\n\nEnv vars use double underscore as delimiter:\n    SYNC_CONFIG__HANDLERS__ENABLE_VECTOR_HANDLERS=false"
+      },
+      "SyncDetails": {
+        "properties": {
+          "total_runs": {
+            "type": "integer",
+            "title": "Total Runs",
+            "default": 0
+          },
+          "successful_runs": {
+            "type": "integer",
+            "title": "Successful Runs",
+            "default": 0
+          },
+          "failed_runs": {
+            "type": "integer",
+            "title": "Failed Runs",
+            "default": 0
+          },
+          "last_job": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SyncJobDetails"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "SyncDetails",
+        "description": "Sync execution details."
+      },
+      "SyncJobDetails": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SyncJobStatus"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "duration_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Seconds"
+          },
+          "entities_inserted": {
+            "type": "integer",
+            "title": "Entities Inserted",
+            "default": 0
+          },
+          "entities_updated": {
+            "type": "integer",
+            "title": "Entities Updated",
+            "default": 0
+          },
+          "entities_deleted": {
+            "type": "integer",
+            "title": "Entities Deleted",
+            "default": 0
+          },
+          "entities_failed": {
+            "type": "integer",
+            "title": "Entities Failed",
+            "default": 0
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "status"
+        ],
+        "title": "SyncJobDetails",
+        "description": "Sync job details."
+      },
+      "SyncJobStatus": {
+        "type": "string",
+        "enum": [
+          "created",
+          "pending",
+          "running",
+          "completed",
+          "failed",
+          "cancelling",
+          "cancelled"
+        ],
+        "title": "SyncJobStatus",
+        "description": "Sync job status enum."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "ValidationErrorDetail": {
+        "properties": {
+          "loc": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Loc",
+            "description": "Location of the error (e.g., ['body', 'url'])",
+            "example": [
+              "body",
+              "url"
+            ]
+          },
+          "msg": {
+            "type": "string",
+            "title": "Msg",
+            "description": "Human-readable error message",
+            "example": "Invalid URL format"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type",
+            "description": "Error type identifier",
+            "example": "value_error.url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationErrorDetail",
+        "description": "Details about a validation error for a specific field."
+      },
+      "ValidationErrorResponse": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationErrorDetail"
+            },
+            "type": "array",
+            "title": "Detail",
+            "description": "List of validation errors"
+          }
+        },
+        "type": "object",
+        "required": [
+          "detail"
+        ],
+        "title": "ValidationErrorResponse",
+        "description": "Response returned when request validation fails (HTTP 422).\n\nThis occurs when the request body contains invalid data, such as\nmalformed URLs, invalid event types, or missing required fields.",
+        "example": {
+          "detail": [
+            {
+              "loc": [
+                "body",
+                "url"
+              ],
+              "msg": "Invalid URL: scheme must be http or https",
+              "type": "value_error.url.scheme"
+            },
+            {
+              "loc": [
+                "body",
+                "event_types"
+              ],
+              "msg": "event_types cannot be empty",
+              "type": "value_error"
+            }
+          ]
+        }
+      },
+      "WebhookMessage": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Unique identifier for this message (UUID format)",
+            "example": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+          },
+          "event_type": {
+            "type": "string",
+            "title": "Event Type",
+            "description": "The type of event (e.g., 'sync.completed', 'sync.failed')",
+            "example": "sync.completed"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Payload",
+            "description": "The event payload data, matching what is delivered to webhooks. Structure varies by event_type."
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Timestamp",
+            "description": "When this message was created (ISO 8601 format, UTC)",
+            "example": "2024-03-15T09:45:32Z"
+          },
+          "channels": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channels",
+            "description": "Channels this message was sent to (typically matches the event type)",
+            "example": [
+              "sync.completed"
+            ]
+          },
+          "tags": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tags",
+            "description": "Tags associated with this message for filtering"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "event_type",
+          "payload",
+          "timestamp"
+        ],
+        "title": "WebhookMessage",
+        "description": "A webhook message that was sent (or attempted) to webhook subscribers.\n\nThe payload contains the actual event data matching the webhook delivery format.",
+        "example": {
+          "channels": [
+            "sync.completed"
+          ],
+          "event_type": "sync.completed",
+          "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+          "payload": {
+            "collection_name": "Customer Support Tickets",
+            "collection_readable_id": "customer-support-tickets-x7k9m",
+            "event_type": "sync.completed",
+            "job_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+            "source_connection_id": "b2c3d4e5-f6a7-8901-bcde-f23456789012",
+            "source_type": "zendesk",
+            "status": "completed",
+            "timestamp": "2024-03-15T09:45:32Z"
+          },
+          "timestamp": "2024-03-15T09:45:32Z"
+        }
+      },
+      "WebhookMessageWithAttempts": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Unique identifier for this message (UUID format)",
+            "example": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+          },
+          "event_type": {
+            "type": "string",
+            "title": "Event Type",
+            "description": "The type of event (e.g., 'sync.completed', 'sync.failed')",
+            "example": "sync.completed"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Payload",
+            "description": "The event payload data, matching what is delivered to webhooks. Structure varies by event_type."
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Timestamp",
+            "description": "When this message was created (ISO 8601 format, UTC)",
+            "example": "2024-03-15T09:45:32Z"
+          },
+          "channels": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channels",
+            "description": "Channels this message was sent to (typically matches the event type)",
+            "example": [
+              "sync.completed"
+            ]
+          },
+          "tags": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tags",
+            "description": "Tags associated with this message for filtering"
+          },
+          "delivery_attempts": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/DeliveryAttempt"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delivery Attempts",
+            "description": "Delivery attempts for this message."
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "event_type",
+          "payload",
+          "timestamp"
+        ],
+        "title": "WebhookMessageWithAttempts",
+        "description": "A webhook message with delivery attempts.",
+        "example": {
+          "channels": [
+            "sync.completed"
+          ],
+          "event_type": "sync.completed",
+          "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+          "payload": {
+            "collection_name": "Customer Support Tickets",
+            "collection_readable_id": "customer-support-tickets-x7k9m",
+            "event_type": "sync.completed",
+            "job_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+            "source_connection_id": "b2c3d4e5-f6a7-8901-bcde-f23456789012",
+            "source_type": "zendesk",
+            "status": "completed",
+            "timestamp": "2024-03-15T09:45:32Z"
+          },
+          "timestamp": "2024-03-15T09:45:32Z"
+        }
+      },
+      "WebhookSubscription": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Unique identifier for this subscription (UUID format)",
+            "example": "c3d4e5f6-a7b8-9012-cdef-345678901234"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url",
+            "description": "The URL where webhook events are delivered",
+            "example": "https://api.mycompany.com/webhooks/airweave"
+          },
+          "filter_types": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filter Types",
+            "description": "Event types this subscription is filtered to receive. See EventType enum for all available types.",
+            "example": [
+              "sync.completed",
+              "sync.failed"
+            ]
+          },
+          "disabled": {
+            "type": "boolean",
+            "title": "Disabled",
+            "description": "Whether this subscription is currently disabled. Disabled subscriptions do not receive event deliveries.",
+            "default": false,
+            "example": false
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description",
+            "description": "Optional human-readable description of this subscription",
+            "example": "Production notifications for data team"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At",
+            "description": "When this subscription was created (ISO 8601 format, UTC)",
+            "example": "2024-03-01T08:00:00Z"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At",
+            "description": "When this subscription was last updated (ISO 8601 format, UTC)",
+            "example": "2024-03-15T14:30:00Z"
+          },
+          "health_status": {
+            "$ref": "#/components/schemas/HealthStatus",
+            "description": "Health status of this subscription based on recent delivery attempts. Values: 'healthy' (all recent deliveries succeeded), 'degraded' (mix of successes and failures), 'failing' (consecutive failures beyond threshold), 'unknown' (no delivery data yet).",
+            "default": "unknown",
+            "example": "healthy"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "url",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "WebhookSubscription",
+        "description": "A webhook subscription (endpoint) configuration.\n\nThis is the lightweight representation returned by list, create, update,\nand delete endpoints.  For the full detail view (delivery attempts,\nsigning secret) see ``WebhookSubscriptionDetail``.",
+        "example": {
+          "created_at": "2024-03-01T08:00:00Z",
+          "description": "Production notifications for data team",
+          "disabled": false,
+          "filter_types": [
+            "sync.completed",
+            "sync.failed"
+          ],
+          "health_status": "healthy",
+          "id": "c3d4e5f6-a7b8-9012-cdef-345678901234",
+          "updated_at": "2024-03-15T14:30:00Z",
+          "url": "https://api.mycompany.com/webhooks/airweave"
+        }
+      },
+      "WebhookSubscriptionDetail": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Unique identifier for this subscription (UUID format)",
+            "example": "c3d4e5f6-a7b8-9012-cdef-345678901234"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url",
+            "description": "The URL where webhook events are delivered",
+            "example": "https://api.mycompany.com/webhooks/airweave"
+          },
+          "filter_types": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filter Types",
+            "description": "Event types this subscription is filtered to receive. See EventType enum for all available types.",
+            "example": [
+              "sync.completed",
+              "sync.failed"
+            ]
+          },
+          "disabled": {
+            "type": "boolean",
+            "title": "Disabled",
+            "description": "Whether this subscription is currently disabled. Disabled subscriptions do not receive event deliveries.",
+            "default": false,
+            "example": false
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description",
+            "description": "Optional human-readable description of this subscription",
+            "example": "Production notifications for data team"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At",
+            "description": "When this subscription was created (ISO 8601 format, UTC)",
+            "example": "2024-03-01T08:00:00Z"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At",
+            "description": "When this subscription was last updated (ISO 8601 format, UTC)",
+            "example": "2024-03-15T14:30:00Z"
+          },
+          "health_status": {
+            "$ref": "#/components/schemas/HealthStatus",
+            "description": "Health status of this subscription based on recent delivery attempts. Values: 'healthy' (all recent deliveries succeeded), 'degraded' (mix of successes and failures), 'failing' (consecutive failures beyond threshold), 'unknown' (no delivery data yet).",
+            "default": "unknown",
+            "example": "healthy"
+          },
+          "delivery_attempts": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/DeliveryAttempt"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delivery Attempts",
+            "description": "Recent delivery attempts for this subscription."
+          },
+          "secret": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Secret",
+            "description": "The signing secret for webhook signature verification. Only included when include_secret=true is passed to the API. Keep this secret secure.",
+            "example": "whsec_C2FVsBQIhrscChlQIMV10R9X4jZ8"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "url",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "WebhookSubscriptionDetail",
+        "description": "Full subscription detail, including delivery attempts and signing secret.\n\nReturned by ``GET /subscriptions/{id}`` only.",
+        "example": {
+          "created_at": "2024-03-01T08:00:00Z",
+          "description": "Production notifications for data team",
+          "disabled": false,
+          "filter_types": [
+            "sync.completed",
+            "sync.failed"
+          ],
+          "health_status": "healthy",
+          "id": "c3d4e5f6-a7b8-9012-cdef-345678901234",
+          "updated_at": "2024-03-15T14:30:00Z",
+          "url": "https://api.mycompany.com/webhooks/airweave"
+        }
+      },
+      "airweave__domains__search__types__plan__RetrievalStrategy": {
+        "type": "string",
+        "enum": [
+          "semantic",
+          "keyword",
+          "hybrid"
+        ],
+        "title": "RetrievalStrategy",
+        "description": "Supported retrieval strategies."
+      }
+    },
+    "securitySchemes": {
+      "ApiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-api-key",
+        "description": "API key for authentication"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "collections",
+      "x-display-name": "Collections",
+      "description": "API endpoints for managing collections - logical groups of data sources that provide unified search capabilities"
+    },
+    {
+      "name": "source-connections",
+      "x-display-name": "Source Connections",
+      "description": "API endpoints for managing live connections to data sources. Source connections are the actual configured instances that Airweave uses to sync data from your apps and databases, transforming it into searchable, structured information within collections"
+    },
+    {
+      "name": "sources",
+      "x-display-name": "Sources",
+      "description": "API endpoints for discovering available data source connectors and their configuration requirements"
+    },
+    {
+      "name": "webhooks",
+      "x-display-name": "Webhooks",
+      "description": "API endpoints for managing webhook subscriptions and messages. Subscribe to events like sync completions to receive real-time notifications at your webhook URL"
+    }
+  ],
+  "servers": [
+    {
+      "url": "https://api.airweave.ai",
+      "description": "Production",
+      "x-fern-server-name": "Production"
+    },
+    {
+      "url": "http://localhost:8001",
+      "description": "Local",
+      "x-fern-server-name": "Local"
+    }
+  ]
+}

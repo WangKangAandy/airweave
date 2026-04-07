@@ -1,0 +1,118 @@
+---
+title: "Attio"
+description: "Attio integration with Airweave"
+---
+
+{/* AUTO-GENERATED CONTENT START */}
+
+
+
+<div className="connector-header" style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+  <img src="icon.svg" alt="Attio logo" width="48" height="48" className="connector-icon" />
+  <h1 style={{ margin: 0 }}>Attio</h1>
+</div>
+
+This connector enables AI agents and RAG systems to retrieve context from Attio through Airweave's unified search layer.
+
+## Configuration
+
+Attio source connector integrates with the Attio API to extract CRM data.
+
+Synchronizes your Attio workspace including objects, lists, records, and notes.
+
+<Card
+  title="View Source Code"
+  icon="brands github"
+  href="https://github.com/airweave-ai/airweave/tree/main/backend/airweave/platform/sources/attio.py"
+>
+  Explore the Attio connector implementation
+</Card>
+
+### Authentication
+
+**Supported authentication methods:**
+- Direct Credentials
+- Auth Provider
+
+### Configuration Options
+
+This connector does not have any additional configuration options.
+
+## Data Models
+
+The following data models are available for this connector:
+
+<Accordion title="AttioObjectEntity">
+
+Schema for Attio Object (e.g., Companies, People, Deals).
+
+| Field | Type | Description |
+|-------|------|-------------|
+| object_id | str | Attio object ID |
+| name | str | Display name of the object |
+| created_at | Optional[datetime] | When the object was created |
+| singular_noun | str | Singular name of the object (e.g., 'Company') |
+| plural_noun | str | Plural name of the object (e.g., 'Companies') |
+| api_slug | str | API slug for the object |
+| icon | Optional[str] | Icon representing this object |
+
+</Accordion>
+<Accordion title="AttioListEntity">
+
+Schema for Attio List.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| list_id | str | Attio list ID |
+| name | str | List name |
+| created_at | Optional[datetime] | When the list was created |
+| workspace_id | str | ID of the workspace this list belongs to |
+| parent_object | Optional[str] | Parent object type if applicable |
+
+</Accordion>
+<Accordion title="AttioRecordEntity">
+
+Schema for Attio Record.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| record_id | str | Attio record ID |
+| name | str | Record display name |
+| created_at | Optional[datetime] | When the record was created |
+| updated_at | Optional[datetime] | When the record was last updated |
+| object_id | Optional[str] | ID/slug of the object this record belongs to |
+| list_id | Optional[str] | ID of the list this record belongs to |
+| parent_object_name | Optional[str] | Name of the parent object/list |
+| description | Optional[str] | Description of the record |
+| email_addresses | List[Dict[str, Any]] | Email addresses associated with this record |
+| phone_numbers | List[Dict[str, Any]] | Phone numbers associated with this record |
+| domains | List[str] | Domain names (for company records) |
+| categories | List[str] | Categories/tags for this record |
+| attributes | Dict[str, Any] | Custom attributes and their values |
+| permalink_url | Optional[str] | URL to view this record in Attio (if provided by API) |
+
+</Accordion>
+<Accordion title="AttioNoteEntity">
+
+Schema for Attio Note.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| note_id | str | Attio note ID |
+| name | str | Note title or preview |
+| created_at | Optional[datetime] | When the note was created |
+| updated_at | Optional[datetime] | When the note was last updated |
+| parent_record_id | str | ID of the record this note is attached to |
+| parent_object | Optional[str] | Type of parent object |
+| title | Optional[str] | Title of the note |
+| content | str | Content of the note |
+| format | Optional[str] | Format of the note (plaintext, markdown, etc.) |
+| author | Optional[Dict[str, Any]] | User who created this note |
+| permalink_url | Optional[str] | URL to view this note in Attio (if provided by API) |
+
+</Accordion>
+
+
+
+
+{/* AUTO-GENERATED CONTENT END */}

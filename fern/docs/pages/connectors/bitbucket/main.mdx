@@ -1,0 +1,120 @@
+---
+title: "Bitbucket"
+description: "Bitbucket integration with Airweave"
+---
+
+{/* AUTO-GENERATED CONTENT START */}
+
+
+
+<div className="connector-header" style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+  <img src="icon.svg" alt="Bitbucket logo" width="48" height="48" className="connector-icon" />
+  <h1 style={{ margin: 0 }}>Bitbucket</h1>
+</div>
+
+This connector enables AI agents and RAG systems to retrieve context from Bitbucket through Airweave's unified search layer.
+
+## Configuration
+
+Bitbucket source connector integrates with the Bitbucket REST API to extract data.
+
+Connects to your Bitbucket workspaces and repositories.
+
+It supports syncing workspaces, repositories, directories,
+and code files with configurable filtering options for branches and file types.
+
+<Card
+  title="View Source Code"
+  icon="brands github"
+  href="https://github.com/airweave-ai/airweave/tree/main/backend/airweave/platform/sources/bitbucket.py"
+>
+  Explore the Bitbucket connector implementation
+</Card>
+
+### Authentication
+
+**Supported authentication methods:**
+- Direct Credentials
+- Auth Provider
+
+### Configuration Options
+
+This connector does not have any additional configuration options.
+
+## Data Models
+
+The following data models are available for this connector:
+
+<Accordion title="BitbucketWorkspaceEntity">
+
+Schema for Bitbucket workspace entity.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| uuid | str | Workspace UUID |
+| display_name | str | Display name of the workspace |
+| created_on | Optional[datetime] | Workspace creation timestamp |
+| slug | str | Workspace slug identifier |
+| is_private | bool | Whether the workspace is private |
+| html_url | Optional[str] | URL to view the workspace |
+
+</Accordion>
+<Accordion title="BitbucketRepositoryEntity">
+
+Schema for Bitbucket repository entity.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| uuid | str | Repository UUID |
+| repo_name | str | Repository display name |
+| created_on | datetime | Repository creation timestamp |
+| updated_on | datetime | Last update timestamp |
+| slug | str | Repository slug |
+| full_name | str | Full repository name including workspace |
+| description | Optional[str] | Repository description |
+| is_private | bool | Whether the repository is private |
+| fork_policy | Optional[str] | Fork policy of the repository |
+| language | Optional[str] | Primary language of the repository |
+| size | Optional[int] | Size of the repository in bytes |
+| mainbranch | Optional[str] | Main branch name |
+| workspace_slug | str | Slug of the parent workspace |
+| html_url | Optional[str] | URL to view the repository |
+
+</Accordion>
+<Accordion title="BitbucketDirectoryEntity">
+
+Schema for Bitbucket directory entity.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| path_id | str | Unique identifier for the directory path |
+| directory_name | str | Display name of the directory |
+| path | str | Path of the directory within the repository |
+| branch | Optional[str] | Branch for this directory view |
+| repo_slug | str | Slug of the repository containing this directory |
+| repo_full_name | str | Full name of the repository |
+| workspace_slug | str | Slug of the workspace |
+| html_url | Optional[str] | URL to view the directory |
+
+</Accordion>
+<Accordion title="BitbucketCodeFileEntity">
+
+Schema for Bitbucket code file entity.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| file_id | str | Unique identifier for the file path |
+| file_name | str | Display name of the file |
+| branch | Optional[str] | Branch for this file version |
+| commit_hash | Optional[str] | Commit hash of the file version |
+| repo_slug | str | Slug of the repository |
+| repo_full_name | str | Full name of the repository |
+| workspace_slug | str | Slug of the workspace |
+| line_count | Optional[int] | Number of lines in the file |
+
+</Accordion>
+
+
+
+
+{/* AUTO-GENERATED CONTENT END */}

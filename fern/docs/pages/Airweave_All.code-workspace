@@ -1,0 +1,17 @@
+{
+	"folders": [
+		{
+			"path": "../../.."
+		},
+		{
+			"path": "../../../../python-sdk"
+		},
+		{
+			"path": "../../../../typescript-sdk"
+		},
+		{
+			"path": "../../../../infra-core"
+		}
+	],
+	"settings": {}
+}

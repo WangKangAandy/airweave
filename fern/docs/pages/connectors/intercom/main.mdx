@@ -1,0 +1,119 @@
+---
+title: "Intercom"
+description: "Intercom integration with Airweave"
+---
+
+{/* AUTO-GENERATED CONTENT START */}
+
+
+
+<div className="connector-header" style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+  <img src="icon.svg" alt="Intercom logo" width="48" height="48" className="connector-icon" />
+  <h1 style={{ margin: 0 }}>Intercom</h1>
+</div>
+
+This connector enables AI agents and RAG systems to retrieve context from Intercom through Airweave's unified search layer.
+
+## Configuration
+
+Intercom source connector.
+
+Syncs conversations, conversation messages (parts), and tickets from Intercom
+to enhance support and CX queries.
+
+<Card
+  title="View Source Code"
+  icon="brands github"
+  href="https://github.com/airweave-ai/airweave/tree/main/backend/airweave/platform/sources/intercom.py"
+>
+  Explore the Intercom connector implementation
+</Card>
+
+### Authentication
+
+This connector uses **OAuth 2.0 authentication**. You can connect through the Airweave UI or API using the OAuth flow.
+
+**Supported authentication methods:**
+- OAuth Browser Flow (recommended for UI)
+- OAuth Token (for programmatic access)
+- Auth Provider (enterprise SSO)
+
+### Configuration Options
+
+This connector does not have any additional configuration options.
+
+## Data Models
+
+The following data models are available for this connector:
+
+<Accordion title="IntercomConversationEntity">
+
+Schema for Intercom conversation entities.
+
+A conversation is a thread of messages between contacts and teammates.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| conversation_id | str | Unique identifier of the conversation |
+| subject | str | Subject or first message preview of the conversation |
+| created_at_value | Optional[datetime] | When the conversation was created |
+| updated_at_value | Optional[datetime] | When the conversation was last updated |
+| web_url_value | Optional[str] | URL to view the conversation in Intercom |
+| state | Optional[str] | Conversation state (open, closed, snoozed) |
+| priority | Optional[str] | Priority level |
+| assignee_name | Optional[str] | Name of the teammate assigned |
+| assignee_email | Optional[str] | Email of the teammate assigned |
+| contact_ids | List[str] | IDs of contacts in the conversation |
+| custom_attributes | Dict[str, Any] | Custom attributes on the conversation |
+| tags | List[str] | Tag names applied to the conversation |
+| source_body | Optional[str] | Body of the first message (source) |
+
+</Accordion>
+<Accordion title="IntercomConversationMessageEntity">
+
+Schema for a single message (conversation part) within an Intercom conversation.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| message_id | str | Unique identifier of the conversation part |
+| conversation_id | str | ID of the parent conversation |
+| conversation_subject | str | Subject of the parent conversation |
+| body | str | Message body (plain text or HTML) |
+| created_at_value | Optional[datetime] | When the message was created |
+| web_url_value | Optional[str] | URL to view the conversation (and message) in Intercom |
+| part_type | Optional[str] | Type of part (comment, assignment, etc.) |
+| author_id | Optional[str] | ID of the author |
+| author_type | Optional[str] | Author type (admin, user, lead, bot) |
+| author_name | Optional[str] | Display name of the author |
+| author_email | Optional[str] | Email of the author |
+
+</Accordion>
+<Accordion title="IntercomTicketEntity">
+
+Schema for Intercom ticket entities.
+
+Tickets are used for structured support workflows.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| ticket_id | str | Unique identifier of the ticket |
+| name | str | Ticket name/title |
+| description | Optional[str] | Ticket description |
+| created_at_value | Optional[datetime] | When the ticket was created |
+| updated_at_value | Optional[datetime] | When the ticket was last updated |
+| web_url_value | Optional[str] | URL to view the ticket in Intercom |
+| state | Optional[str] | Ticket state (open, closed, etc.) |
+| priority | Optional[str] | Priority level |
+| assignee_id | Optional[str] | ID of the assignee |
+| assignee_name | Optional[str] | Name of the assignee |
+| contact_id | Optional[str] | ID of the contact |
+| ticket_type_id | Optional[str] | Ticket type ID |
+| ticket_type_name | Optional[str] | Ticket type name |
+| ticket_parts_text | Optional[str] | Concatenated body text of ticket parts (replies, comments, notes) for search |
+
+</Accordion>
+
+
+
+
+{/* AUTO-GENERATED CONTENT END */}

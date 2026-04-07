@@ -1,0 +1,498 @@
+components:
+  schemas:
+    SourceConnectionCreate:
+      examples: null
+    SourceConnectionUpdate:
+      examples: null
+
+    AgenticSearchEvent:
+      oneOf:
+        - $ref: "#/components/schemas/AgenticSearchStartedEvent"
+        - $ref: "#/components/schemas/AgenticSearchThinkingEvent"
+        - $ref: "#/components/schemas/AgenticSearchToolCallEvent"
+        - $ref: "#/components/schemas/AgenticSearchRerankingEvent"
+        - $ref: "#/components/schemas/AgenticSearchDoneEvent"
+        - $ref: "#/components/schemas/AgenticSearchErrorEvent"
+      discriminator:
+        propertyName: type
+        mapping:
+          started: "#/components/schemas/AgenticSearchStartedEvent"
+          thinking: "#/components/schemas/AgenticSearchThinkingEvent"
+          tool_call: "#/components/schemas/AgenticSearchToolCallEvent"
+          reranking: "#/components/schemas/AgenticSearchRerankingEvent"
+          done: "#/components/schemas/AgenticSearchDoneEvent"
+          error: "#/components/schemas/AgenticSearchErrorEvent"
+
+    AgenticSearchStartedEvent:
+      type: object
+      required: [type, request_id, tier, collection_readable_id, query]
+      properties:
+        type:
+          type: string
+          enum: [started]
+        request_id:
+          type: string
+        tier:
+          type: string
+        collection_readable_id:
+          type: string
+        query:
+          type: string
+        thinking:
+          type: boolean
+          nullable: true
+        filter:
+          type: array
+          nullable: true
+          items:
+            type: object
+        limit:
+          type: integer
+          nullable: true
+
+    AgenticSearchThinkingEvent:
+      type: object
+      required: [type, duration_ms, diagnostics]
+      properties:
+        type:
+          type: string
+          enum: [thinking]
+        thinking:
+          type: string
+          nullable: true
+          description: Extended reasoning text from the LLM.
+        text:
+          type: string
+          nullable: true
+          description: Conversational text output before tool calls.
+        duration_ms:
+          type: integer
+        diagnostics:
+          type: object
+          properties:
+            iteration:
+              type: integer
+            prompt_tokens:
+              type: integer
+            completion_tokens:
+              type: integer
+
+    AgenticSearchToolCallEvent:
+      type: object
+      required: [type, tool_name, duration_ms, diagnostics]
+      properties:
+        type:
+          type: string
+          enum: [tool_call]
+        tool_name:
+          type: string
+          enum: [search, read, add_to_results, remove_from_results, count, get_children, get_siblings, get_parent, review_results, return_results_to_user]
+        duration_ms:
+          type: integer
+        diagnostics:
+          type: object
+          properties:
+            iteration:
+              type: integer
+            tool_call_id:
+              type: string
+            arguments:
+              type: object
+              description: Full LLM-generated tool input.
+            stats:
+              oneOf:
+                - $ref: "#/components/schemas/SearchToolStats"
+                - $ref: "#/components/schemas/ReadToolStats"
+                - $ref: "#/components/schemas/CollectToolStats"
+                - $ref: "#/components/schemas/CountToolStats"
+                - $ref: "#/components/schemas/NavigateToolStats"
+                - $ref: "#/components/schemas/ReviewToolStats"
+                - $ref: "#/components/schemas/FinishToolStats"
+                - $ref: "#/components/schemas/ErrorToolStats"
+              description: Output stats. Shape depends on tool_name.
+
+    EntitySummary:
+      type: object
+      properties:
+        entity_id:
+          type: string
+        name:
+          type: string
+        entity_type:
+          type: string
+        source_name:
+          type: string
+        relevance_score:
+          type: number
+          nullable: true
+
+    SearchToolStats:
+      type: object
+      description: Stats from a search tool call.
+      properties:
+        result_count:
+          type: integer
+          description: Total results returned.
+        new_results:
+          type: integer
+          description: Results not seen in previous searches.
+        first_results:
+          type: array
+          items:
+            $ref: "#/components/schemas/EntitySummary"
+
+    ReadToolStats:
+      type: object
+      description: Stats from a read tool call.
+      properties:
+        found:
+          type: integer
+          description: Entities successfully read.
+        not_found:
+          type: integer
+          description: Entity IDs that weren't found.
+        entities:
+          type: array
+          items:
+            $ref: "#/components/schemas/EntitySummary"
+        context_label:
+          type: string
+          nullable: true
+
+    CollectToolStats:
+      type: object
+      description: Stats from add_to_results or remove_from_results.
+      properties:
+        added:
+          type: integer
+        already_collected:
+          type: integer
+        not_found:
+          type: integer
+        total_collected:
+          type: integer
+          description: Total results collected after this operation.
+        entities:
+          type: array
+          items:
+            $ref: "#/components/schemas/EntitySummary"
+
+    CountToolStats:
+      type: object
+      description: Stats from a count tool call.
+      properties:
+        count:
+          type: integer
+          description: Number of entities matching the filter.
+
+    NavigateToolStats:
+      type: object
+      description: Stats from get_children, get_siblings, or get_parent.
+      properties:
+        result_count:
+          type: integer
+        context_label:
+          type: string
+          description: "Human-readable label, e.g. 'children of chan-engineering'."
+        first_results:
+          type: array
+          items:
+            $ref: "#/components/schemas/EntitySummary"
+
+    ReviewToolStats:
+      type: object
+      description: Stats from review_results.
+      properties:
+        total_collected:
+          type: integer
+        entity_count:
+          type: integer
+        first_results:
+          type: array
+          items:
+            $ref: "#/components/schemas/EntitySummary"
+
+    FinishToolStats:
+      type: object
+      description: Stats from return_results_to_user.
+      properties:
+        accepted:
+          type: boolean
+          description: Whether the agent accepted the result set.
+        total_collected:
+          type: integer
+        warning:
+          type: string
+          nullable: true
+          description: Warning if very few results collected relative to seen.
+
+    ErrorToolStats:
+      type: object
+      description: Stats when a tool call errors.
+      properties:
+        error:
+          type: string
+
+    AgenticSearchRerankingEvent:
+      type: object
+      required: [type, duration_ms, diagnostics]
+      properties:
+        type:
+          type: string
+          enum: [reranking]
+        duration_ms:
+          type: integer
+        diagnostics:
+          type: object
+          properties:
+            input_count:
+              type: integer
+            output_count:
+              type: integer
+            model:
+              type: string
+            top_relevance_score:
+              type: number
+            bottom_relevance_score:
+              type: number
+
+    AgenticSearchDoneEvent:
+      type: object
+      required: [type, results, duration_ms]
+      properties:
+        type:
+          type: string
+          enum: [done]
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/SearchResult"
+          description: Full result set.
+        duration_ms:
+          type: integer
+        diagnostics:
+          type: object
+          nullable: true
+          properties:
+            total_iterations:
+              type: integer
+            all_seen_entity_ids:
+              type: array
+              items:
+                type: string
+            all_read_entity_ids:
+              type: array
+              items:
+                type: string
+            all_collected_entity_ids:
+              type: array
+              items:
+                type: string
+            max_iterations_hit:
+              type: boolean
+            total_llm_retries:
+              type: integer
+            stagnation_nudges_sent:
+              type: integer
+            prompt_tokens:
+              type: integer
+            completion_tokens:
+              type: integer
+            cache_creation_input_tokens:
+              type: integer
+            cache_read_input_tokens:
+              type: integer
+
+    AgenticSearchErrorEvent:
+      type: object
+      required: [type, message]
+      properties:
+        type:
+          type: string
+          enum: [error]
+        message:
+          type: string
+          description: Error message.
+        duration_ms:
+          type: integer
+
+paths:
+  /collections/{readable_id}/search/instant:
+    post:
+      x-fern-sdk-group-name:
+        - collections
+        - search
+      x-fern-sdk-method-name: instant
+      x-fern-examples:
+        - path-parameters:
+            readable_id: "customer-support-tickets-x7k9m"
+          request:
+            query: "How do I reset my password?"
+            retrieval_strategy: "hybrid"
+            limit: 10
+          response:
+            body:
+              results:
+                - entity_id: "page-abc123"
+                  name: "Production Deployment Guide"
+                  relevance_score: 0.94
+                  textual_representation: "# Production Deployment Guide\n\nThis document covers the standard deployment process for production releases."
+                  created_at: "2025-02-10T09:15:00Z"
+                  updated_at: "2025-03-18T16:30:00Z"
+                  breadcrumbs:
+                    - entity_id: "ws-1"
+                      name: "Acme Workspace"
+                      entity_type: "NotionWorkspaceEntity"
+                    - entity_id: "db-eng"
+                      name: "Engineering"
+                      entity_type: "NotionDatabaseEntity"
+                  airweave_system_metadata:
+                    source_name: "notion"
+                    entity_type: "NotionPageEntity"
+                    original_entity_id: "page-abc123"
+                    chunk_index: 0
+                    sync_id: "d4e5f6a7-b8c9-4d0e-1f2a-3b4c5d6e7f80"
+                    sync_job_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+                  access:
+                    viewers: null
+                    is_public: null
+                  web_url: "https://notion.so/Deployment-Guide-abc123"
+                  url: null
+                  raw_source_fields:
+                    icon: "🚀"
+                    archived: false
+                    parent_type: "database_id"
+
+  /collections/{readable_id}/search/classic:
+    post:
+      x-fern-sdk-group-name:
+        - collections
+        - search
+      x-fern-sdk-method-name: classic
+      x-fern-examples:
+        - path-parameters:
+            readable_id: "customer-support-tickets-x7k9m"
+          request:
+            query: "quarterly revenue report"
+            limit: 10
+          response:
+            body:
+              results:
+                - entity_id: "page-abc123"
+                  name: "Production Deployment Guide"
+                  relevance_score: 0.94
+                  textual_representation: "# Production Deployment Guide\n\nThis document covers the standard deployment process for production releases."
+                  created_at: "2025-02-10T09:15:00Z"
+                  updated_at: "2025-03-18T16:30:00Z"
+                  breadcrumbs:
+                    - entity_id: "ws-1"
+                      name: "Acme Workspace"
+                      entity_type: "NotionWorkspaceEntity"
+                    - entity_id: "db-eng"
+                      name: "Engineering"
+                      entity_type: "NotionDatabaseEntity"
+                  airweave_system_metadata:
+                    source_name: "notion"
+                    entity_type: "NotionPageEntity"
+                    original_entity_id: "page-abc123"
+                    chunk_index: 0
+                    sync_id: "d4e5f6a7-b8c9-4d0e-1f2a-3b4c5d6e7f80"
+                    sync_job_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+                  access:
+                    viewers: null
+                    is_public: null
+                  web_url: "https://notion.so/Deployment-Guide-abc123"
+                  url: null
+                  raw_source_fields:
+                    icon: "🚀"
+                    archived: false
+                    parent_type: "database_id"
+
+  /collections/{readable_id}/search/agentic:
+    post:
+      x-fern-sdk-group-name:
+        - collections
+        - search
+      x-fern-sdk-method-name: agentic
+      x-fern-examples:
+        - path-parameters:
+            readable_id: "customer-support-tickets-x7k9m"
+          request:
+            query: "find all deployment-related docs from last month"
+            thinking: true
+          response:
+            body:
+              results:
+                - entity_id: "page-abc123"
+                  name: "Production Deployment Guide"
+                  relevance_score: 0.94
+                  textual_representation: "# Production Deployment Guide\n\nThis document covers the standard deployment process for production releases."
+                  created_at: "2025-02-10T09:15:00Z"
+                  updated_at: "2025-03-18T16:30:00Z"
+                  breadcrumbs:
+                    - entity_id: "ws-1"
+                      name: "Acme Workspace"
+                      entity_type: "NotionWorkspaceEntity"
+                    - entity_id: "db-eng"
+                      name: "Engineering"
+                      entity_type: "NotionDatabaseEntity"
+                  airweave_system_metadata:
+                    source_name: "notion"
+                    entity_type: "NotionPageEntity"
+                    original_entity_id: "page-abc123"
+                    chunk_index: 0
+                    sync_id: "d4e5f6a7-b8c9-4d0e-1f2a-3b4c5d6e7f80"
+                    sync_job_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+                  access:
+                    viewers: null
+                    is_public: null
+                  web_url: "https://notion.so/Deployment-Guide-abc123"
+                  url: null
+                  raw_source_fields:
+                    icon: "🚀"
+                    archived: false
+                    parent_type: "database_id"
+                - entity_id: "msg-def456"
+                  name: "Deployment checklist update"
+                  relevance_score: 0.87
+                  textual_representation: "Updated the deployment checklist to include the new canary step. Make sure to verify metrics before promoting to 100%."
+                  created_at: "2025-03-15T11:22:00Z"
+                  updated_at: "2025-03-15T11:22:00Z"
+                  breadcrumbs:
+                    - entity_id: "team-1"
+                      name: "Acme"
+                      entity_type: "SlackWorkspaceEntity"
+                    - entity_id: "chan-eng"
+                      name: "#engineering"
+                      entity_type: "SlackChannelEntity"
+                  airweave_system_metadata:
+                    source_name: "slack"
+                    entity_type: "SlackMessageEntity"
+                    original_entity_id: "msg-def456"
+                    chunk_index: 0
+                    sync_id: "e5f6a7b8-c9d0-4e1f-2a3b-4c5d6e7f8091"
+                    sync_job_id: "b2c3d4e5-f6a7-8901-bcde-f12345678901"
+                  access:
+                    viewers: null
+                    is_public: null
+                  web_url: "https://acme.slack.com/archives/C0123ABC/p1710500520"
+                  url: null
+                  raw_source_fields:
+                    channel_name: "#engineering"
+                    username: "alice"
+
+  /collections/{readable_id}/search/agentic/stream:
+    post:
+      x-fern-sdk-group-name:
+        - collections
+        - search
+      x-fern-sdk-method-name: stream_agentic
+      x-fern-streaming:
+        format: sse
+      responses:
+        "200":
+          description: SSE stream of agentic search events.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgenticSearchEvent"
