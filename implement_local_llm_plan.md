@@ -334,3 +334,49 @@ docker logs airweave-temporal-worker --tail 50
 1. 启动本地服务（Ollama、text2vec）
 2. 执行 `./start.sh --noninteractive`
 3. 触发同步测试
+
+---
+
+## 八、Docker 镜像导出/导入
+
+### 当前服务需要的 Docker 镜像
+
+```
+ghcr.io/airweave-ai/airweave-backend:latest
+ghcr.io/airweave-ai/airweave-frontend:latest
+ghcr.io/airweave-ai/airweave-connect:latest
+postgres:16
+redis:7-alpine
+semitechnologies/transformers-inference:sentence-transformers-all-MiniLM-L6-v2
+temporalio/auto-setup:1.24.2
+temporalio/admin-tools:1.27.2-tctl-1.18.2-cli-1.3.0
+temporalio/ui:2.26.2
+vespaengine/vespa:8
+svix/svix-server
+alpine:3.19
+```
+
+### 导出镜像命令
+
+```bash
+# 导出所有镜像到 tar 文件
+docker save -o airweave-images.tar \
+  ghcr.io/airweave-ai/airweave-backend:latest \
+  ghcr.io/airweave-ai/airweave-frontend:latest \
+  ghcr.io/airweave-ai/airweave-connect:latest \
+  postgres:16 \
+  redis:7-alpine \
+  semitechnologies/transformers-inference:sentence-transformers-all-MiniLM-L6-v2 \
+  temporalio/auto-setup:1.24.2 \
+  temporalio/admin-tools:1.27.2-tctl-1.18.2-cli-1.3.0 \
+  temporalio/ui:2.26.2 \
+  vespaengine/vespa:8 \
+  svix/svix-server \
+  alpine:3.19
+```
+
+### 导入命令
+
+```bash
+docker load -i airweave-images.tar
+```
