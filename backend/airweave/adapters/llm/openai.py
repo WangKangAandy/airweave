@@ -64,17 +64,18 @@ class OpenAILLM(BaseLLM):
         thinking: bool = False,
     ) -> T:
         api_start = time.monotonic()
+        
+        schema_example = json.dumps(schema_json, ensure_ascii=False)[:500]
+        full_prompt = f"{prompt}\n\n请以JSON格式输出，JSON schema如下：\n{schema_example}"
+
         response = await self._client.chat.completions.create(
             model=self._model_name,
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": prompt},
+                {"role": "user", "content": full_prompt},
             ],
             temperature=0.3,
-            response_format={
-                "type": "json_schema",
-                "schema": schema_json,
-            },
+            response_format={"type": "json_object"},
             max_tokens=self._model_spec.max_output_tokens,
         )
         api_time = time.monotonic() - api_start

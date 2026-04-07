@@ -271,6 +271,8 @@ services:
     ports:
       - "8081:8081" # Query/Document API
       - "19071:19071" # Config server (for deployment)
+    environment:
+      - VESPA_IGNORE_NOT_ENOUGH_MEMORY=true  # TODO：Allow Vespa to start even if host has < 8GB RAM (common in development environments)
     volumes:
       - vespa_data:/opt/vespa/var
       - ../vespa/app:/app

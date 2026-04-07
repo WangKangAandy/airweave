@@ -402,11 +402,10 @@ if [[ -z $ACTION_RECREATE && -z $ACTION_RESTART && -z $SKIP_CONTAINER_CREATION ]
         running_containers=$($COMPOSE_CMD --env-file .env -f "$COMPOSE_FILE" ps -q 2>/dev/null || true)
 
         if [[ -n $running_containers ]]; then
-            # Containers are already running - just show status
-            log_success "Airweave is already running"
+            log_success "Airweave containers found (running)"
             SKIP_CONTAINER_CREATION=1
             SKIP_ENV_SETUP=1
-            SKIP_HEALTH_CHECKS=1
+            # Always run health checks to verify all required services are up
         else
             # Containers exist but are stopped - start them
             log_note "Airweave containers found (stopped)"
