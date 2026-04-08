@@ -20,6 +20,7 @@ from .fireflies import FirefliesSource
 from .freshdesk import FreshdeskSource
 from .github import GitHubSource
 from .gitlab import GitLabSource
+from .local_git import LocalGitSource
 from .gmail import GmailSource
 from .google_calendar import GoogleCalendarSource
 from .google_docs import GoogleDocsSource
@@ -88,6 +89,7 @@ ALL_SOURCES: list[type] = [
     FreshdeskSource,
     GitHubSource,
     GitLabSource,
+    LocalGitSource,
     HerbCodeReviewSource,
     HerbDocumentsSource,
     HerbMeetingsSource,

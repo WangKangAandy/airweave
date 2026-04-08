@@ -174,6 +174,56 @@ class ElasticsearchConfig(SourceConfig):
     pass
 
 
+class LocalGitConfig(SourceConfig):
+    """Local Git repository configuration schema."""
+
+    repo_path: str = Field(
+        ...,
+        title="Repository Path",
+        description="Local Git repository path (e.g., '/home/user/projects/my-repo' or '/Users/john/projects/cuda-migration'). Must be a valid git repository.",
+    )
+    branch: str = Field(
+        default="main",
+        title="Branch",
+        description="Specific branch to sync (e.g., 'main', 'development'). If empty, uses default branch.",
+    )
+    follow_symlinks: bool = Field(
+        default=False,
+        title="Follow Symlinks",
+        description="Whether to follow symbolic links (not recommended for large repos).",
+    )
+
+    @field_validator("repo_path")
+    @classmethod
+    def validate_repo_path(cls, v):
+        """Validate that repository path exists and is a git repository."""
+        import os
+        if not v or not v.strip():
+            raise ValueError("Repository path is required")
+
+        path = v.strip()
+        if not os.path.exists(path):
+            raise ValueError(f"Repository path does not exist: {path}")
+
+        if not os.path.isdir(path):
+            raise ValueError(f"Repository path must be a directory: {path}")
+
+        # Check if it's a git repository
+        git_dir = os.path.join(path, ".git")
+        if not os.path.exists(git_dir):
+            raise ValueError(f"Not a git repository: {path} (missing .git directory)")
+
+        return path
+
+    @field_validator("repo_path", mode="before")
+    @classmethod
+    def normalize_repo_path(cls, v):
+        """Normalize repository path (remove trailing slash)."""
+        if not v or not isinstance(v, str):
+            return None
+        return v.rstrip("/")
+
+
 class GitHubConfig(SourceConfig):
     """Github configuration schema."""
 

@@ -38,6 +38,7 @@ const getSourceDescription = (shortName: string, fallbackDescription?: string): 
     'confluence': 'Connect to Confluence to sync pages, spaces, knowledge base content, and collaborative documentation. Includes page hierarchies, comments, team knowledge, and documentation structure.',
     'todoist': 'Connect to Todoist to sync projects, tasks, sections, comments, and productivity data. Includes task hierarchies, due dates, project management, and personal organization features.',
     'github': 'Connect to GitHub to sync repositories, repository contents, directories, and code files. Includes repository metadata, file contents, directory structures, and development information.',
+    'local_git': 'Connect to Local Git repositories to sync code files, directories, and repository metadata. Reads files directly from your local filesystem - no GitHub API or authentication required. Perfect for private projects, offline work, and faster local development.',
     'stripe': 'Connect to Stripe to sync balance, transactions, charges, customers, events, invoices, payment intents, payment methods, payouts, refunds, and subscriptions.',
     'freshdesk': 'Connect to Freshdesk to sync tickets, conversations, contacts, companies, and solution articles. Includes support ticket threads, customer and company data, and knowledge base content.',
     'dropbox': 'Connect to Dropbox to sync files, folders, sharing information, and cloud storage data. Includes file versions, collaboration features, storage metadata, and account information.',

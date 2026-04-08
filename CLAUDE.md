@@ -57,6 +57,16 @@ npm run build                  # Production build
 npm run lint                   # ESLint
 ```
 
+### MCP Server
+```bash
+cd mcp
+npm install
+npm run test:all               # Run all tests
+npm run test:mcp               # Core MCP tests
+npm run test:http              # HTTP transport tests
+npm run test:oauth             # OAuth + org-resolver tests
+```
+
 ## Backend Structure
 
 ```
@@ -112,13 +122,251 @@ Key patterns:
 - Component order: hooks → effects → handlers → render
 - Path alias: `@/` maps to `./src`
 
+## MCP Server Structure
+
+```
+mcp/src/
+├── server.ts                    # Core MCP server factory
+├── index.ts                     # Local mode entry point (stdio)
+├── index-http.ts                # Hosted mode entry point (Streamable HTTP)
+├── api/
+│   ├── airweave-client.ts       # Airweave API client
+│   └── org-resolver.ts          # OAuth org resolution with LRU cache
+├── auth/
+│   ├── auth0-provider.ts        # OAuth 2.0 provider implementation
+│   ├── auth0-callback.ts        # OAuth callback handler
+│   ├── oauth-transaction-store.ts # Redis-backed pending auth store
+│   ├── registered-clients-store.ts # Dynamic client registration store
+│   ├── redis.ts                 # Redis client singleton
+│   └── security.ts              # Security utilities (redaction, hashing)
+└── types/                       # TypeScript type definitions
+```
+
+Deployment modes:
+- **Local (stdio)**: Desktop AI clients (Claude Desktop, Cursor, VS Code)
+- **Hosted (HTTP)**: Cloud AI platforms (OpenAI Agent Builder, Cursor remote)
+
+Authentication:
+- API key via `X-API-Key` header (both modes)
+- OAuth 2.0 via `Authorization: Bearer <jwt>` (hosted mode only, when enabled)
+- Dual auth middleware resolves API key vs OAuth per request
+
+## API Layer Architecture
+
+### Endpoint Structure
+```
+api/v1/
+├── endpoints/
+│   ├── sources.py              # Public API - source metadata
+│   ├── source_connections.py   # Public API - connection management
+│   ├── collections.py          # Public API - collection CRUD
+│   ├── sync.py                 # Internal - sync orchestration
+│   ├── organizations.py        # Internal - org management
+│   ├── api_keys.py             # Internal - API key management
+│   └── connect/                # Connect frontend API - session tokens
+├── deps.py                     # Dependency injection & auth resolution
+├── auth.py                     # Auth0 integration & token validation
+└── middleware.py               # Request processing & CORS
+```
+
+### Key Dependencies
+- `get_context()`: Returns `ApiContext` with organization, user, logger, analytics
+- `require_org_role()`: Enforces admin/owner role checks for mutation endpoints
+- `Inject(Protocol)`: Protocol-based DI for domain services
+
+### Authentication Methods
+1. **Auth0**: JWT validation (production) or mock (dev with `AUTH_ENABLED=false`)
+2. **API Key**: Header `X-API-Key: <key>` for service-to-service
+3. **System**: Local dev with `FIRST_SUPERUSER`
+4. **Connect Sessions**: Short-lived tokens (10 min TTL) for embedded flows
+
+### Version Convention
+- API version is NOT part of URL path — just `host.com/{endpoint}`
+- Version information in response headers
+
+## CRUD Layer Architecture
+
+### Base Classes
+- `CRUDBaseOrganization`: Organization-scoped resources (most common)
+- `CRUDBaseUser`: User-scoped resources (profiles)
+- `CRUDPublic`: System-wide resources (sources, destinations)
+
+### BaseContext Pattern
+`BaseContext` (parent of `ApiContext` and `SyncContext`) provides:
+- `organization`: Always present (required for all operations)
+- `user`: Present for user auth, `None` for API keys
+- `logger`: Contextual logger (auto-derived from identity)
+- `has_feature(flag)`: Check organization feature flags
+
+### Transaction Management
+Use `UnitOfWork` for multi-step atomic operations:
+```python
+async with UnitOfWork(db) as uow:
+    obj1 = await crud.create(db, obj_in=data1, ctx=ctx, uow=uow)
+    obj2 = await crud.create(db, obj_in=data2, ctx=ctx, uow=uow)
+    # Commits on exit, rolls back on exception
+```
+
+### Key Invariants
+1. Every operation requires `BaseContext` (or subclass)
+2. Organization resources are isolated (cross-org access prevented)
+3. User tracking is automatic when `track_user=True`
+4. Logger is pre-configured via `ctx.logger`
+
+## Sync Architecture
+
+### Core Components
+- **SyncFactory**: Builds SyncContext (frozen data), SyncRuntime (live services)
+- **SyncOrchestrator**: Coordinates entire sync workflow
+- **AsyncSourceStream**: Pull-based streaming with backpressure
+- **EntityPipeline**: Action/handler architecture (INSERT/UPDATE/DELETE/KEEP)
+- **EntityTracker**: Centralized dedup + progress tracking
+- **TokenManager**: OAuth token refresh for long-running syncs
+
+### Concurrency Model
+- **Pull-based**: Workers pull entities only when ready (prevents overload)
+- **Backpressure**: Bounded queues (default: 10000) naturally throttle producers
+- **Worker pool**: Semaphore-controlled concurrency (default: 20 workers)
+
+### Action Handlers
+- `DestinationHandler`: Chunking → embedding → vector DB (concurrent)
+- `ArfHandler`: Raw entity capture via ArfService (concurrent)
+- `PostgresHandler`: Metadata persistence (sequential, last)
+
+###### Progress Tracking
+- Event-driven via `EventBus` and `SyncProgressRelay` (EventSubscriber)
+- Redis pubsub for real-time updates: `sync_job:{job_id}`
+- Snapshot storage: `sync_progress_snapshot:{job_id}` (30 min TTL)
+
+### Orphaned Sync Self-Destruct
+Workflows automatically detect orphaned syncs (deleted sync/source_connection) and clean up schedules:
+1. Early detection in `create_sync_job_activity`
+2. Late detection in `run_sync_activity` via `OrphanedSyncError`
+3. Self-destruct via `self_destruct_orphaned_sync_activity` (deletes schedules, logs at INFO level)
+
+## Temporal Module Structure
+
+### Activities (`domains/temporal/activities/`)
+Each activity is a `@dataclass` with explicit DI:
+- `run_sync.py`: Execute sync job with heartbeating and stall detection
+- `create_sync_job.py`: Create sync job record (for scheduled runs)
+- `transition_sync_job.py`: Terminal state transitions via SyncJobStateMachine
+- `cleanup_stuck_sync_jobs.py`: Detect and cancel stuck jobs
+- `self_destruct_orphaned_sync.py`: Clean up schedules for orphaned syncs
+- `cleanup_sync_data.py`: Remove Vespa + ARF data for deleted syncs
+- `api_key_notifications.py`: Email notifications for expiring API keys
+
+### Workflows (`domains/temporal/workflows/`)
+Each workflow is one class per file:
+- `run_source_connection.py`: Four-phase orchestration
+- `cleanup_stuck_sync_jobs.py`: Periodic stuck-job cleanup
+- `cleanup_sync_data.py`: Post-deletion data cleanup
+- `api_key_notifications.py`: API key expiration checks
+
+### Worker Wiring (`domains/temporal/worker/`)
+`wiring.py` is of DI wiring point — reads dependencies from `container` and instantiates activities.
+
+## ARF (Airweave Raw Format)
+
+Raw entity capture for replay, debugging, and evals.
+
+### Structure
+```
+raw/{sync_id}/
+├── manifest.json          # Sync metadata
+├── entities/{id}.json     # One file per entity
+└── files/{id}_{name}      # Binary files (optional)
+```
+
+### Key Components
+- `ArfService` (`domains/arf/service.py`): Write operations during sync
+- `ArfReader` (`domains/arf/reader.py`): Entity reconstruction for replay
+- `ArfReplaySource` (`domains/arf/replay_source.py`): Internal source for ARF replay
+- `StoragePaths` (`domains/storage/paths.py`): Path constants
+- Protocols: `ArfServiceProtocol`, `ArfReaderProtocol`
+- Storage adapters: Filesystem, Azure Blob, AWS S3, GCP GCS (`adapters/storage/`)
+
+### Integration
+`ArfService` is injected into `ArfHandler` via `EntityDispatcherBuilder`. Capture happens during action dispatch (INSERT/UPDATE entities stored, DELETE entities removed).
+
+## Feature Flags
+
+Lightweight organization-level feature flags.
+
+### Backend Usage
+```python
+from airweave.core.shared_models import FeatureFlag
+
+# Check in endpoints via ApiContext
+if not ctx.has_feature(FeatureFlag.S3_DESTINATION):
+    raise HTTPException(403, "Feature not available")
+
+# CRUD operations
+await crud.organization.enable_feature(db, org_id, FeatureFlag.S3_DESTINATION)
+await crud.organization.disable_feature(db, org_id, FeatureFlag.WHITE_LABEL)
+flags = await crud.organization.get_org_features(db, org_id)
+```
+
+### Frontend Usage
+```typescript
+import { useOrganizationStore } from '@/lib/stores/organizations';
+import { FeatureFlags } from '@/lib/constants/feature-flags';
+
+const hasFeature = useOrganizationStore((state) => state.hasFeature);
+
+{hasFeature(FeatureFlags.S3_DESTINATION) && <S3DestinationCard />}
+```
+
+### Adding New Flags
+1. Add to `FeatureFlag` enum in `backend/airweave/core/shared_models.py`
+2. Add to `FeatureFlags` constants in `frontend/src/lib/constants/feature-flags.ts`
+3. Enable for organizations via CRUD or admin panel
+
+## Monke Testing Framework
+
+E2E testing framework for source connectors — creates real test data in external systems, triggers syncs, and verifies results.
+
+### Components
+- **Bongos** (`monke/bongos/{short_name}.py`): Test data creation/cleanup via external API
+- **Generation schemas** (`monke/generation/schemas/{short_name}.py`): Pydantic schemas for content generation
+- **Generation adapters** (`monke/generation/{short_name}.py`): LLM-powered content generation
+- **Test configs** (`monke/configs/{short_name}.yaml`): Test flow configuration
+
+### Running Tests
+```bash
+cd airweave
+./monke.sh {short_name}          # Run single connector test
+MONKE_VERBOSE=1 ./monke.sh {short_name}  # Verbose logging for debugging
+```
+
+### Critical Requirement
+Monke tests MUST create and verify ALL entity types that your source connector yields:
+1. List all entity types from `generate_entities()` in your source file
+2. Create at least one instance of each type in your bongo
+3. Return descriptors for all created entities for verification
+4. Verify each entity type appears in search index after sync
+
+### Test Flow
+1. `cleanup` — Remove leftover test data
+2. `create` — Create all entity types
+3. `sync` — Trigger Airweave sync
+4. `verify` — Search Qdrant for each entity using embedded tokens
+5. `update` — Update some entities
+6. `sync` — Sync again
+7. `verify` — Verify updates appear
+8. `partial_delete` — Delete subset of entities
+9. `sync` — Sync again
+10. `verify_partial_deletion` — Verify deletions (if supported)
+11. `complete_delete` — Delete all entities
+12. `cleanup` — Final cleanup
+
 ## Code Style
 
 ### Backend (Python)
 - Ruff: 100-char lines, Google docstrings, double quotes
 - Async for all I/O operations
 - Typed parameters and returns; functions under 50 lines
-- RESTful endpoints — version is NOT part of the URL path (just `host.com/{endpoint}`)
+- RESTful endpoints — version is NOT part of URL path (just `host.com/{endpoint}`)
 - Use logger from `ctx` (API) or `sync_context` (during sync)
 - Security: never use `random.*` for security values (ruff S311); use `secrets` module
 
@@ -127,23 +375,6 @@ Key patterns:
 - Strict typing; shared interfaces in `types/index.ts`
 - Never use `Math.random()` (ESLint ban); use `crypto.getRandomValues()` or `crypto.randomUUID()`
 - Toast notifications via Sonner: `toast.success()`, `toast.error()`, etc.
-
-## Testing
-
-### Backend test markers
-- `@pytest.mark.unit` — fast, isolated
-- `@pytest.mark.integration` — requires database/services
-- `@pytest.mark.live_integration` — requires live cloud infrastructure
-- `@pytest.mark.e2e` — end-to-end
-- `@pytest.mark.slow` — long-running
-
-Async mode is `auto` — async test functions are detected automatically.
-
-### Monke (E2E Framework)
-Located in `monke/`. Tests source connectors end-to-end by creating real test data in external systems, triggering syncs, and verifying results in the search index. Components:
-- `monke/bongos/{short_name}.py` — test data creation/cleanup
-- `monke/generation/schemas/{short_name}.py` — generation schemas
-- `monke/configs/{short_name}.yaml` — test configuration
 
 ## OAuth Browser Flow Contract
 
