@@ -164,6 +164,10 @@ if settings.ADDITIONAL_CORS_ORIGINS:
     else:
         CORS_ORIGINS.extend(additional_origins)
 
+# In local environment, always allow all origins for development
+if settings.ENVIRONMENT == "local" and "*" not in CORS_ORIGINS:
+    CORS_ORIGINS.append("*")
+
 # Add the dynamic CORS middleware that handles both default origins and white label specific origins
 app.add_middleware(
     DynamicCORSMiddleware,
