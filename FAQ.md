@@ -1,5 +1,31 @@
 # Airweave 故障排查 FAQ
 
+## 🚀 自动 IP 配置说明
+
+Airweave 现已实现自动 IP 管理，无需手动配置 IP 地址：
+
+### 本地开发
+- **访问方式**: http://localhost:8080
+- **API 配置**: 自动使用 http://localhost:8001
+- **配置方法**: 无需任何配置，开箱即用
+
+### 远程访问
+- **访问方式**: http://your-server-ip:8080
+- **API 配置**: 前端会根据访问地址自动适配
+- **配置方法**: 系统自动检测并配置最佳 API 地址
+
+### 配置优先级
+1. 环境变量 `FRONTEND_API_URL` (最高优先级)
+2. 浏览器地址自动检测
+3. 默认值 `http://localhost:8001`
+
+### 技术实现
+- 前端配置支持多层级配置机制
+- Docker 移除了硬编码 IP 地址
+- 支持不同网络环境的零配置部署
+
+---
+
 ## Q1: 浏览器无法加载 collections，报错 "An error occurred: Failed to fetch"
 
 ### 问题症状
@@ -21,11 +47,11 @@ docker ps --filter "name=airweave" --format "table {{.Names}}\t{{.Status}}"
 ```bash
 # 检查前端容器的 API_URL 配置
 docker logs airweave-frontend --tail 20 | grep "API_URL"
-# 预期输出: Runtime config injected successfully. API_URL set to: http://192.168.24.40:8001
+# 预期输出: Runtime config injected successfully. API_URL set to: http://localhost:8001
 
 # 检查生成的 config.js 文件
 docker exec airweave-frontend cat /app/dist/config.js
-# 预期: API_URL: "http://192.168.24.40:8001"
+# 预期: API_URL: "http://localhost:8001"
 ```
 
 #### 3. 后端健康检查
@@ -39,7 +65,7 @@ curl http://localhost:8001/health/ready
 ```bash
 # 测试 OPTIONS 预检请求
 curl -X OPTIONS http://localhost:8001/api/v1/collections \
-  -H "Origin: http://192.168.24.40:8080" \
+  -H "Origin: http://localhost:8080" \
   -H "Access-Control-Request-Method: GET" \
   -H "Access-Control-Request-Headers: Authorization,Content-Type" \
   -v 2>&1 | grep "< HTTP"
@@ -121,8 +147,8 @@ docker logs airweave-frontend --tail 30 | grep -E "API_URL|error|Error"
 #### 修复 1: 前端 API_URL 配置错误
 **日期**: 2026-04-10
 **问题**: 前端 API_URL 配置为 `http://localhost:8001`，远程访问时浏览器尝试向客户端 localhost 发起请求
-**解决**: 修改 `docker/docker-compose.yml`，设置 `API_URL=http://192.168.24.40:8001`
-**状态**: 已修复
+**解决**: 系统已升级为自动 IP 管理，默认使用 `http://localhost:8001` 进行本地开发。如需远程访问，可以通过前端动态检测或配置环境变量
+**状态**: 已通过无感配置解决
 
 #### 修复 2: 浏览器缓存导致无法加载 collections
 **日期**: 2026-04-10
@@ -148,7 +174,7 @@ docker logs airweave-frontend --tail 10 | grep -E "GET|304"
 #### 1. API 端点路径
 - **正确**: `/collections`、`/organizations` 等
 - **错误**: `/api/v1/collections` (返回 404)
-- **检查方法**: `curl http://192.168.24.40:8001/openapi.json | grep -o '"/[^"]*"'`
+- **检查方法**: `curl http://localhost:8001/openapi.json | grep -o '"/[^"]*"'`
 
 #### 2. 前端配置优先级
 1. `window.ENV.API_URL` (容器启动时生成)
@@ -276,20 +302,20 @@ docker logs airweave-backend --tail 100 | grep -i "temporal"
 
 **修复命令**:
 ```bash
-docker exec airweave-temporal /usr/local/bin/temporal operator search-attribute create --name SyncId --type Keyword --namespace default --address 172.18.0.6:7233
+docker exec airweave-temporal /usr/local/bin/temporal operator search-attribute create --name SyncId --type Keyword --namespace default --address temporal:7233
 ```
 
 **验证方法**:
 ```bash
-docker exec airweave-temporal /usr/local/bin/temporal operator search-attribute list --namespace default --address 172.18.0.6:7233
+docker exec airweave-temporal /usr/local/bin/temporal operator search-attribute list --namespace default --address temporal:7233
 # 应该看到 SyncId 在列表中
 ```
 
 **技术分析**:
 - temporal-init 容器尝试使用主机名连接 Temporal 服务
-- Alpine 容器的 DNS 解析无法解析 Docker 内部主机名
-- 需要使用 Docker 内部网络 IP (172.18.0.6) 直接连接
-- IP 地址需要根据实际的 Docker 网络配置进行调整
+- 使用 Docker 服务名 `temporal` 代替硬编码 IP
+- Docker 内部 DNS 会自动解析服务名到正确的容器 IP
+- 这种方式更灵活，适用于不同的 Docker 网络配置
 
 ## Q3: GitHub Source 同步失败，报错 tiktoken 编码下载失败
 
