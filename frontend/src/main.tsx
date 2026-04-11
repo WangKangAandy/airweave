@@ -9,6 +9,10 @@ import { Auth0ProviderWithNavigation } from "@/lib/auth0-provider";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { setTokenProvider } from "@/lib/api";
 import { PostHogProvider } from "@/lib/posthog-provider";
+import { setupDynamicApiConfig } from "@/lib/geo-ip-detection";
+
+// Initialize dynamic API configuration on app startup
+setupDynamicApiConfig();
 
 // Create a client
 const queryClient = new QueryClient({
