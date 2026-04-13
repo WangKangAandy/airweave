@@ -23,6 +23,19 @@ T = TypeVar("T", bound=BaseModel)
 class OpenAILLM(BaseLLM):
     """OpenAI-compatible LLM provider (supports local services)."""
 
+    # Known providers that don't support json_schema format
+    # These providers only support the older json_object format
+    _JSON_SCHEMA_UNSUPPORTED_PROVIDERS = {
+        "deepseek.com",
+        "deepseek",
+        "groq.com",
+        "groq",
+        "cerebras.cloud",
+        "cerebras",
+        "together.xyz",
+        "together",
+    }
+
     def __init__(
         self,
         model_spec: LLMModelSpec,
@@ -43,10 +56,33 @@ class OpenAILLM(BaseLLM):
         except Exception as e:
             raise RuntimeError(f"Failed to initialize OpenAI client: {e}") from e
 
+        # Detect provider support for json_schema format
+        self._supports_json_schema = self._detect_json_schema_support(base_url)
+
         self._logger.debug(
             f"[OpenAILLM] Initialized with model={model_spec.api_model_name}, "
-            f"base_url={base_url}, context_window={model_spec.context_window}"
+            f"base_url={base_url}, context_window={model_spec.context_window}, "
+            f"supports_json_schema={self._supports_json_schema}"
         )
+
+    def _detect_json_schema_support(self, base_url: str | None) -> bool:
+        """Detect if the API provider supports json_schema response format.
+
+        Returns False for known incompatible providers (DeepSeek, Groq, Cerebras, etc.).
+        Returns True for official OpenAI API and unknown providers (optimistic default).
+        """
+        if not base_url:
+            # No base_url means official OpenAI API, which supports json_schema
+            return True
+
+        # Check if base_url contains any known unsupported provider domains
+        base_url_lower = base_url.lower()
+        for provider in self._JSON_SCHEMA_UNSUPPORTED_PROVIDERS:
+            if provider in base_url_lower:
+                return False
+
+        # Default to True for unknown providers
+        return True
 
     @property
     def _model_name(self) -> str:
@@ -63,6 +99,29 @@ class OpenAILLM(BaseLLM):
         system_prompt: str,
         thinking: bool = False,
     ) -> T:
+        # Choose response format based on provider support
+        if self._supports_json_schema:
+            response_format = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": schema.__name__.lower(),
+                    "strict": True,
+                    "schema": schema_json,
+                },
+            }
+        else:
+            # Fallback to json_object format for providers that don't support json_schema
+            response_format = {"type": "json_object"}
+
+            # Modify system prompt to include schema instructions for json_object mode
+            schema_instruction = json.dumps(schema_json, indent=2)
+            system_prompt = (
+                f"{system_prompt}\n\n"
+                f"IMPORTANT: You must respond with a valid JSON object that matches this schema:\n"
+                f"{schema_instruction}\n"
+                f"Do not include any other text or markdown formatting."
+            )
+
         api_start = time.monotonic()
         response = await self._client.chat.completions.create(
             model=self._model_name,
@@ -71,10 +130,7 @@ class OpenAILLM(BaseLLM):
                 {"role": "user", "content": prompt},
             ],
             temperature=0.3,
-            response_format={
-                "type": "json_schema",
-                "schema": schema_json,
-            },
+            response_format=response_format,
             max_tokens=self._model_spec.max_output_tokens,
         )
         api_time = time.monotonic() - api_start
