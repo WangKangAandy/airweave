@@ -104,7 +104,7 @@ services:
     environment:
       - ENABLE_AUTH=false
       # API_URL设置为auto，让前端JavaScript自动检测
-      - API_URL=auto
+      - API_URL=http://192.168.24.40:8001
     depends_on:
       backend:
         condition: service_healthy
