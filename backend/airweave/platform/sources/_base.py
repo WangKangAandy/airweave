@@ -145,6 +145,8 @@ class BaseSource:
     @classmethod
     def get_supported_auth_methods(cls) -> list[AuthenticationMethod]:
         """Get all supported authentication methods."""
+        if cls.auth_methods is None:
+            return []
         methods = list(cls.auth_methods)
         if (
             AuthenticationMethod.OAUTH_BROWSER in methods

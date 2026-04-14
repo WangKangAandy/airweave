@@ -8,17 +8,22 @@ directly from the local filesystem and uses GitPython to extract metadata.
 from __future__ import annotations
 
 import asyncio
+import mimetypes
 import os
+import subprocess
 from datetime import datetime
 from pathlib import Path
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
+from airweave.core.config import settings
 from airweave.core.logging import ContextualLogger
 from airweave.domains.sources.token_providers.protocol import (
     AuthProviderKind,
     TokenProviderProtocol,
 )
-from airweave.platform.configs.auth import GitHubAuthConfig
+from airweave.domains.storage import FileSkippedException
+from airweave.domains.storage.file_service import FileService
+from airweave.platform.configs.auth import LocalGitAuthConfig
 from airweave.platform.configs.config import LocalGitConfig
 from airweave.platform.decorators import source
 from airweave.platform.entities._base import BaseEntity, Breadcrumb
@@ -41,10 +46,10 @@ from airweave.schemas.source_connection import AuthenticationMethod
     short_name="local_git",
     auth_methods=[AuthenticationMethod.DIRECT],
     oauth_type=None,
-    auth_config_class=GitHubAuthConfig,
+    auth_config_class=LocalGitAuthConfig,
     config_class=LocalGitConfig,
     labels=["Code", "Local"],
-    supports_continuous=True,
+    supports_continuous=False,
     supports_temporal_relevance=False,
 )
 class LocalGitSource(BaseSource):
@@ -87,7 +92,11 @@ class LocalGitSource(BaseSource):
     ) -> "LocalGitSource":
         """Create a new local git source instance."""
         instance = cls(auth=auth, logger=logger, http_client=None)
-        instance._repo_path = config.repo_path
+
+        # Map host path to container path in Docker environment (config-driven)
+        repo_path = cls._map_host_path_to_container(config.repo_path, logger=logger)
+
+        instance._repo_path = repo_path
         instance._branch = config.branch or "main"
         instance._follow_symlinks = config.follow_symlinks
         return instance
@@ -107,15 +116,37 @@ class LocalGitSource(BaseSource):
             self.logger.warning(error_msg)
             raise ValueError(error_msg)
 
+    async def validate(self) -> None:
+        """Validate that this source is reachable and credentials are usable.
+
+        For LocalGit, validation checks if repository path exists and is a valid git repository.
+        """
+        if not self._repo_path:
+            raise ValueError("Repository path not configured")
+
+        # Check if path exists
+        if not os.path.exists(self._repo_path):
+            raise ValueError(f"Repository path does not exist: {self._repo_path}")
+
+        # Check if it's a git repository
+        try:
+            self._ensure_safe_directory()
+            from git import Repo as GitRepo
+            GitRepo(self._repo_path)
+        except Exception as e:
+            raise ValueError(f"Invalid git repository at {self._repo_path}: {e}")
+
     async def generate_entities(
         self,
         cursor: Optional[Any] = None,
+        files: Optional[FileService] = None,
         node_selections: Optional[Any] = None,
     ) -> AsyncGenerator[BaseEntity, None]:
         """Generate entities from local git repository.
 
         Args:
             cursor: Sync cursor for incremental updates
+            files: FileService for saving files to temp directory
             node_selections: Node selection data for filtering (optional)
 
         Yields:
@@ -134,6 +165,7 @@ class LocalGitSource(BaseSource):
             return
 
         try:
+            self._ensure_safe_directory()
             repo = GitRepo(self._repo_path)
         except Exception as e:
             self.logger.error(f"Failed to open git repository at {self._repo_path}: {e}")
@@ -149,7 +181,7 @@ class LocalGitSource(BaseSource):
 
         # Generate file and directory entities
         try:
-            async for entity in self._create_file_entities(repo, cursor):
+            async for entity in self._create_file_entities(repo, cursor, files):
                 yield entity
         except Exception as e:
             self.logger.error(f"Error during file entity generation: {e}")
@@ -176,12 +208,14 @@ class LocalGitSource(BaseSource):
         self,
         repo: Any,
         cursor: Optional[Any] = None,
+        file_service: Optional[FileService] = None,
     ) -> AsyncGenerator[BaseEntity, None]:
         """Create file and directory entities from repository.
 
         Args:
             repo: GitPython repository object
             cursor: Sync cursor for incremental updates
+            file_service: FileService for saving files to temp directory
 
         Yields:
             GitHub entities: directories and code files
@@ -195,9 +229,9 @@ class LocalGitSource(BaseSource):
                 pass
 
         # Walk through repository filesystem
-        for root, dirs, files in os.walk(self._repo_path):
-            # Skip hidden directories and .git
-            dirs[:] = [d for d in dirs if not d.startswith('.') and d != ".git"]
+        for root, dirs, filenames in os.walk(self._repo_path):
+            # Skip .git directory (git metadata should not be indexed)
+            dirs[:] = [d for d in dirs if d != ".git"]
 
             # Check if we should follow symlinks
             if not self._follow_symlinks:
@@ -214,7 +248,7 @@ class LocalGitSource(BaseSource):
                 yield dir_entity
 
             # Process files
-            for file in files:
+            for file in filenames:
                 file_path = os.path.join(root, file)
                 file_rel_path = os.path.relpath(file_path, self._repo_path)
 
@@ -233,8 +267,15 @@ class LocalGitSource(BaseSource):
                 except OSError:
                     continue
 
+                # Read file content for text detection and processing
+                try:
+                    with open(file_path, "rb") as f:
+                        file_content = f.read(16384)  # Read first 16KB for text detection
+                except OSError:
+                    continue
+
                 # Skip non-text files
-                if not is_text_file(file_path):
+                if not is_text_file(file_path, file_size, file_content):
                     continue
 
                 # Check if file was modified since last sync
@@ -251,13 +292,28 @@ class LocalGitSource(BaseSource):
 
                 # Create code file entity
                 try:
-                    file_entity = await asyncio.to_thread(
+                    file_entity, content_bytes = await asyncio.to_thread(
                         self._create_code_file_entity,
                         file_path,
                         file_rel_path,
-                        repo
+                        repo,
                     )
+
+                    if file_service:
+                        await file_service.save_bytes(
+                            entity=file_entity,
+                            content=content_bytes,
+                            filename_with_extension=file_rel_path,
+                            logger=self.logger,
+                        )
+
+                        if not file_entity.local_path:
+                            raise ValueError(
+                                f"Save failed - no local path set for {file_entity.name}"
+                            )
                     yield file_entity
+                except FileSkippedException as e:
+                    self.logger.debug(f"Skipping file: {e.reason}")
                 except Exception as e:
                     self.logger.warning(
                         f"Failed to create entity for file {file_rel_path}: {e}"
@@ -290,6 +346,7 @@ class LocalGitSource(BaseSource):
             default_branch=self._branch,
             language=language,
             size=self._get_repo_size(repo_path),
+            fork=False,  # Local repositories are not forks
             forks_count=None,
             open_issues_count=None,
             stars_count=None,
@@ -311,35 +368,36 @@ class LocalGitSource(BaseSource):
             GitHubDirectoryEntity
         """
         path_parts = rel_path.split("/") if rel_path != "." else []
-        dir_name = path_parts[-1] if path_parts else repo_path or "root"
+        dir_name = path_parts[-1] if path_parts else Path(self._repo_path).name
+
+        repo_name = Path(self._repo_path).name
 
         return GitHubDirectoryEntity(
-            sha="",  # Local dirs don't have git hashes
+            full_path=f"{repo_name}/{rel_path}",
             path=rel_path,
             name=dir_name,
-            type="dir",
-            size=0,
-            url=f"file://{os.path.join(self._repo_path or '', rel_path)}",
+            repo_name=repo_name,
+            repo_owner="local",  # Local repositories don't have owners
+            branch=self._branch,
             breadcrumbs=self._build_breadcrumbs(rel_path),
         )
 
     def _create_code_file_entity(
         self, file_path: str, file_rel_path: str, repo: Any
-    ) -> GitHubCodeFileEntity:
+    ) -> tuple[GitHubCodeFileEntity, bytes]:
         """Create code file entity.
 
         Args:
             file_path: Absolute path to file
             file_rel_path: Relative path to file
             repo: GitPython repository object
-
         Returns:
-            GitHubCodeFileEntity
+            A tuple of (GitHubCodeFileEntity, UTF-8 encoded file bytes)
         """
         # Read file content
         try:
             with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-                content = f.read()
+                content_text = f.read()
         except IOError as e:
             raise IOError(f"Failed to read file {file_path}: {e}")
 
@@ -353,17 +411,37 @@ class LocalGitSource(BaseSource):
         # Detect language
         language = self._detect_language_from_extension(file_rel_path)
 
-        return GitHubCodeFileEntity(
-            sha=sha,
-            path=file_rel_path,
-            name=Path(file_rel_path).name,
-            content=content,
-            file_name=Path(file_rel_path).name,
-            language=language,
-            size=os.path.getsize(file_path),
-            url=f"file://{file_path}",
+        # Calculate line count (matching GitHub Source)
+        line_count = content_text.count("\n") + 1
+
+        # Detect MIME type (matching GitHub Source)
+        mime_type = mimetypes.guess_type(file_rel_path)[0] or "text/plain"
+        file_type = mime_type.split("/")[0] if "/" in mime_type else "file"
+
+        repo_name = Path(self._repo_path).name
+
+        file_entity = GitHubCodeFileEntity(
             breadcrumbs=self._build_breadcrumbs(file_rel_path),
+            full_path=f"{repo_name}/{file_rel_path}",
+            name=Path(file_rel_path).name,
+            branch=self._branch,
+            url=f"file://{file_path}",
+            size=os.path.getsize(file_path),
+            file_type=file_type,
+            mime_type=mime_type,
+            local_path=None,  # Will be set by FileService.save_bytes()
+            repo_name=repo_name,
+            path_in_repo=file_rel_path,
+            repo_owner="local",
+            language=language,
+            commit_id=sha,
+            html_url=f"file://{file_path}",
+            sha=sha,
+            line_count=line_count,
+            is_binary=False,
         )
+
+        return file_entity, content_text.encode("utf-8")
 
     def _build_breadcrumbs(self, rel_path: str) -> List[Breadcrumb]:
         """Build breadcrumbs from relative path.
@@ -417,8 +495,8 @@ class LocalGitSource(BaseSource):
 
         # Count files by language
         for root, dirs, files in os.walk(self._repo_path):
-            # Skip hidden directories
-            dirs[:] = [d for d in dirs if not d.startswith('.') and d != ".git"]
+            # Skip .git directory (git metadata should not be indexed)
+            dirs[:] = [d for d in dirs if d != ".git"]
 
             for file in files:
                 file_path = os.path.join(root, file)
@@ -464,3 +542,76 @@ class LocalGitSource(BaseSource):
             pass
 
         return total_size // 1024  # Convert to KB
+
+    def _ensure_safe_directory(self) -> None:
+        """Ensure mounted host repos are trusted by git in containerized environments."""
+        if not self._repo_path:
+            return
+
+        # Only auto-trust configured mounted prefixes inside Docker.
+        if not os.path.exists("/.dockerenv"):
+            return
+        mapped_prefixes = tuple(container for _, container in settings.local_git_mount_map_pairs)
+        if mapped_prefixes and not self._path_under_prefixes(self._repo_path, mapped_prefixes):
+            return
+
+        try:
+            get_result = subprocess.run(
+                ["git", "config", "--global", "--get-all", "safe.directory"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            configured = set(get_result.stdout.splitlines())
+            if self._repo_path in configured:
+                return
+
+            subprocess.run(
+                ["git", "config", "--global", "--add", "safe.directory", self._repo_path],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            self.logger.info("Added git safe.directory for local repo: %s", self._repo_path)
+        except Exception as e:
+            # Non-fatal: GitRepo(...) below will raise a clearer validation error if needed.
+            self.logger.warning("Failed to configure git safe.directory for %s: %s", self._repo_path, e)
+
+    @classmethod
+    def _map_host_path_to_container(cls, host_path: str, *, logger: ContextualLogger) -> str:
+        """Map configured host path prefixes to container prefixes (longest-prefix match)."""
+        if not (os.path.exists("/.dockerenv") and host_path):
+            return host_path
+
+        normalized_host_path = cls._normalize_prefix(host_path)
+        best_match: tuple[str, str] | None = None
+        for host_prefix, container_prefix in settings.local_git_mount_map_pairs:
+            if cls._path_under_prefixes(normalized_host_path, (host_prefix,)):
+                if best_match is None or len(host_prefix) > len(best_match[0]):
+                    best_match = (host_prefix, container_prefix)
+
+        if not best_match:
+            return normalized_host_path
+
+        host_prefix, container_prefix = best_match
+        if normalized_host_path == host_prefix:
+            mapped_path = container_prefix
+        else:
+            suffix = normalized_host_path[len(host_prefix) :].lstrip("/")
+            mapped_path = f"{container_prefix}/{suffix}"
+
+        logger.info("Mapped host path to container path: %s -> %s", host_path, mapped_path)
+        return mapped_path
+
+    @staticmethod
+    def _normalize_prefix(path: str) -> str:
+        """Normalize a POSIX path and remove trailing slash."""
+        normalized = os.path.normpath(path.strip())
+        if not normalized.startswith("/"):
+            normalized = f"/{normalized}"
+        return normalized
+
+    @staticmethod
+    def _path_under_prefixes(path: str, prefixes: tuple[str, ...]) -> bool:
+        """Return True if path equals prefix or is under any prefix."""
+        return any(path == prefix or path.startswith(f"{prefix}/") for prefix in prefixes)

@@ -151,6 +151,20 @@ The CLI outputs rich interactive results in your terminal and clean JSON when pi
 - **Workers**: [Temporal](https://temporal.io/) (orchestration), [Redis](https://redis.io/) (pub/sub)
 - **Deployment**: [Docker Compose](https://docs.docker.com/compose/) (dev), [Kubernetes](https://kubernetes.io/) (prod)
 
+## Local Git Source Mount Configuration
+
+If you use the `Local Git` connector with Docker, configure host mounts and path mapping in `.env`:
+
+```bash
+LOCAL_GIT_HOST_HOME_PATH=/home/mccxadmin
+LOCAL_GIT_HOST_DATA_PATH=/data
+LOCAL_GIT_MOUNT_MAPS=/home/mccxadmin:/host_home,/data:/host_data
+LOCAL_GIT_ALLOWED_HOST_ROOTS=/home/mccxadmin,/data
+```
+
+- `LOCAL_GIT_MOUNT_MAPS`: host-path to container-path prefix mapping used by the backend.
+- `LOCAL_GIT_ALLOWED_HOST_ROOTS`: allowlist used to validate `repo_path` at connection creation time.
+
 ## Contributing
 
 We welcome contributions! See our [Contributing Guide](CONTRIBUTING.md).

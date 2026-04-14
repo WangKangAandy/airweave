@@ -49,6 +49,10 @@ interface SourceDetails {
   };
 }
 
+interface LocalGitMountRootsResponse {
+  host_roots: string[];
+}
+
 export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadableId, isAddingToExisting = false }) => {
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === 'dark';
@@ -95,6 +99,7 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
   const [clientSecret, setClientSecret] = useState('');
   const [customRedirectUrl, setCustomRedirectUrl] = useState('');
   const [showCustomRedirect, setShowCustomRedirect] = useState(false);
+  const [localGitMountRoots, setLocalGitMountRoots] = useState<string[]>([]);
 
   // Handle URL input with automatic https:// prefix
   const handleRedirectUrlChange = (value: string) => {
@@ -147,9 +152,20 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
     return sourceDetails?.auth_methods?.includes('direct');
   };
 
+  // Check if this source requires auth fields for direct auth
+  // Some sources (like LocalGit) don't require any authentication
+  const requiresAuthFields = () => {
+    // Sources with auth_methods = null don't require authentication
+    if (!sourceDetails?.auth_methods || sourceDetails.auth_methods.length === 0) {
+      return false;
+    }
+    // Check if auth_fields exist and have fields
+    return sourceDetails?.auth_fields?.fields && sourceDetails.auth_fields.fields.length > 0;
+  };
+
   // Determine available auth methods based on source
   const getAvailableAuthMethods = (): AuthMode[] => {
-    if (!sourceDetails || !sourceDetails.auth_methods) return [];
+    if (!sourceDetails || !sourceDetails.auth_methods || sourceDetails.auth_methods.length === 0) return [];
 
     const methods: AuthMode[] = [];
 
@@ -225,10 +241,30 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
     fetchSourceDetails();
   }, [selectedSource]);
 
+  useEffect(() => {
+    const fetchLocalGitMountRoots = async () => {
+      if (selectedSource !== 'local_git') {
+        setLocalGitMountRoots([]);
+        return;
+      }
+
+      try {
+        const response = await apiClient.get<LocalGitMountRootsResponse>('/sources/local-git/mount-roots');
+        if (!response.ok) return;
+        const data = await response.json();
+        setLocalGitMountRoots(Array.isArray(data.host_roots) ? data.host_roots : []);
+      } catch (_error) {
+        setLocalGitMountRoots([]);
+      }
+    };
+
+    fetchLocalGitMountRoots();
+  }, [selectedSource]);
+
   // Set default auth mode based on available methods
   // This runs after source details and auth providers are loaded
   useEffect(() => {
-    if (!sourceDetails || !sourceDetails.auth_methods || authMode) return;
+    if (!sourceDetails || !sourceDetails.auth_methods || sourceDetails.auth_methods.length === 0 || authMode) return;
 
     // Determine default auth mode based on available methods
     if (sourceDetails.auth_methods.includes('direct')) {
@@ -291,10 +327,13 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
       }
     } else if (authMode === 'direct_auth') {
       // Check if all required auth fields are filled
-      if (sourceDetails?.auth_fields?.fields) {
-        const requiredFields = sourceDetails.auth_fields.fields.filter(f => f.required);
-        const allFilled = requiredFields.every(field => authFields[field.name]?.trim());
-        if (!allFilled) return false;
+      // Skip auth field validation if source doesn't require auth fields (e.g., LocalGit)
+      if (requiresAuthFields()) {
+        if (sourceDetails?.auth_fields?.fields) {
+          const requiredFields = sourceDetails.auth_fields.fields.filter(f => f.required);
+          const allFilled = requiredFields.every(field => authFields[field.name]?.trim());
+          if (!allFilled) return false;
+        }
       }
     } else if (authMode === 'oauth2') {
       // Check if custom OAuth credentials are required
@@ -339,14 +378,21 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
       // Handle different auth modes
       if (authMode === 'direct_auth') {
         // Direct auth (API key, passwords, config)
-        if (Object.keys(authFields).length === 0) {
-          toast.error('Please provide authentication credentials');
-          setIsCreating(false);
-          return;
+        // Check if auth fields are required and filled
+        if (requiresAuthFields()) {
+          if (Object.keys(authFields).length === 0) {
+            toast.error('Please provide authentication credentials');
+            setIsCreating(false);
+            return;
+          }
+          authentication = {
+            credentials: authFields
+          };
+        } else {
+          // Source doesn't require auth fields (e.g., LocalGit)
+          // Don't send authentication object at all
+          authentication = null;
         }
-        authentication = {
-          credentials: authFields
-        };
       } else if (authMode === 'oauth2') {
         // OAuth flow (OAuth1 or OAuth2)
         authentication = {
@@ -389,12 +435,14 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
         description: `${sourceName} connection for ${collectionName}`,
         short_name: selectedSource,
         readable_collection_id: isAddingToExisting ? existingCollectionId : collectionId,
-        authentication: authentication,
+        // Only include authentication field if not null
+        ...(authentication !== null && { authentication }),
         // For direct auth, sync immediately since we have credentials
         // For OAuth, don't sync until after authorization is complete
         // For external provider, sync immediately since we're using existing auth
         // For browse-tree sources, don't sync immediately — user selects nodes first
-        sync_immediately: (authMode === 'direct_auth' || authMode === 'external_provider') && !supportsBrowseTree,
+        // For sources with no auth methods, sync immediately
+        sync_immediately: (authMode === 'direct_auth' || authMode === 'external_provider' || !authMode) && !supportsBrowseTree,
       };
 
       // Add config fields if any - filter out empty values
@@ -584,7 +632,7 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
                   )}
 
                   {/* Direct auth fields (API keys, passwords, config) */}
-                  {authMode === 'direct_auth' && sourceDetails?.auth_fields?.fields && (
+                  {authMode === 'direct_auth' && requiresAuthFields() && sourceDetails?.auth_fields?.fields && (
                     <div className="space-y-3">
                       <label className="block text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                         Direct Credentials Configuration
@@ -723,6 +771,11 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
                                 </ReactMarkdown>
                               </div>
                             )}
+                          {selectedSource === 'local_git' && field.name === 'repo_path' && localGitMountRoots.length > 0 && (
+                            <div className="text-xs text-gray-500 dark:text-gray-400 mb-1.5">
+                              Allowed mount roots: {localGitMountRoots.join(', ')}
+                            </div>
+                          )}
                             {field.enum_values ? (
                               <Select
                                 value={(configData[field.name] as string) || ''}

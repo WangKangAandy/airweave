@@ -135,7 +135,7 @@ class SourceRegistry(SourceRegistryProtocol):
             ),
             runtime_auth_all_fields=runtime_all,
             runtime_auth_optional_fields=runtime_optional,
-            auth_methods=[m.value for m in source_cls.auth_methods],
+            auth_methods=[m.value for m in source_cls.auth_methods] if source_cls.auth_methods else None,
             oauth_type=_enum_to_str(source_cls.oauth_type),
             requires_byoc=source_cls.requires_byoc,
             supports_continuous=source_cls.supports_continuous,

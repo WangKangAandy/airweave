@@ -185,6 +185,10 @@ class CollectionMetadataBuilder:
             "A team communication platform featuring channels, direct messages, and "
             "integrations for real-time collaboration."
         ),
+        "local_git": (
+            "A local Git repository source for syncing code from cloned repositories "
+            "without requiring GitHub API access or authentication."
+        ),
         "slite": (
             "An AI-powered knowledge base platform for creating, organizing, and "
             "finding team documentation."

@@ -3,6 +3,7 @@
 Wraps environment variables and provides defaults.
 """
 
+import os
 from typing import Optional
 
 from pydantic import PostgresDsn, ValidationInfo, field_validator
@@ -271,6 +272,13 @@ class Settings(BaseSettings):
     SVIX_JWT_SECRET: str
     WEBHOOK_VERIFY_ENDPOINTS: bool = True
 
+    # Local Git host path mapping configuration
+    # Format: "/host/path:/container/path,/data:/host_data"
+    LOCAL_GIT_MOUNT_MAPS: str = "/home/mccxadmin:/host_home,/data:/host_data"
+    # Optional explicit allowlist for repo_path input (host-side prefixes)
+    # If omitted, host prefixes from LOCAL_GIT_MOUNT_MAPS are used.
+    LOCAL_GIT_ALLOWED_HOST_ROOTS: Optional[list[str]] = None
+
     @field_validator("HEALTH_CHECK_TIMEOUT", mode="before")
     def validate_health_check_timeout(cls, v: float) -> float:
         """Validate that the health-check timeout is positive."""
@@ -334,6 +342,17 @@ class Settings(BaseSettings):
             return [origin.strip() for origin in v.split(";") if origin.strip()]
 
         return [origin.strip() for origin in v.split(",") if origin.strip()]
+
+    @field_validator("LOCAL_GIT_ALLOWED_HOST_ROOTS", mode="before")
+    def parse_local_git_allowed_roots(cls, v: Optional[str | list[str]]) -> Optional[list[str]]:
+        """Parse LOCAL_GIT_ALLOWED_HOST_ROOTS from comma/semicolon-separated string."""
+        if v is None or isinstance(v, list):
+            return v
+        if ";" in v:
+            parsed = [item.strip() for item in v.split(";") if item.strip()]
+        else:
+            parsed = [item.strip() for item in v.split(",") if item.strip()]
+        return parsed or None
 
     @field_validator(
         "AUTH0_DOMAIN",
@@ -583,3 +602,35 @@ class Settings(BaseSettings):
         return frozenset(
             name.strip() for name in self.HEALTH_CRITICAL_PROBES.split(",") if name.strip()
         )
+
+    @staticmethod
+    def _normalize_posix_prefix(path: str) -> str:
+        """Normalize a path/prefix to POSIX absolute style without trailing slash."""
+        normalized = os.path.normpath(path.strip())
+        if not normalized.startswith("/"):
+            normalized = f"/{normalized}"
+        return normalized
+
+    @property
+    def local_git_mount_map_pairs(self) -> list[tuple[str, str]]:
+        """Parse LOCAL_GIT_MOUNT_MAPS into host/container prefix pairs."""
+        pairs: list[tuple[str, str]] = []
+        for raw in self.LOCAL_GIT_MOUNT_MAPS.split(","):
+            item = raw.strip()
+            if not item or ":" not in item:
+                continue
+            host_prefix, container_prefix = item.split(":", 1)
+            host_prefix = self._normalize_posix_prefix(host_prefix)
+            container_prefix = self._normalize_posix_prefix(container_prefix)
+            pairs.append((host_prefix, container_prefix))
+        return pairs
+
+    @property
+    def local_git_allowed_host_roots(self) -> tuple[str, ...]:
+        """Return normalized allowed host roots for Local Git repo_path validation."""
+        roots = self.LOCAL_GIT_ALLOWED_HOST_ROOTS
+        if roots:
+            normalized = sorted({self._normalize_posix_prefix(root) for root in roots})
+            return tuple(normalized)
+        inferred = sorted({host for host, _ in self.local_git_mount_map_pairs})
+        return tuple(inferred)
