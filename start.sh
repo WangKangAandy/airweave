@@ -180,6 +180,68 @@ ensure_env_value() {
     return 1
 }
 
+ensure_bundle_images_loaded() {
+    local offline_mode auto_load_bundle bundle_image
+    offline_mode=${OFFLINE_MODE:-$(get_env_value "OFFLINE_MODE")}
+    auto_load_bundle=${AUTO_LOAD_BUNDLE:-$(get_env_value "AUTO_LOAD_BUNDLE")}
+    bundle_image=${BUNDLE_IMAGE:-$(get_env_value "BUNDLE_IMAGE")}
+
+    # Explicit opt-in to avoid surprising behavior in normal dev loops.
+    if [[ ${auto_load_bundle,,} != "true" ]]; then
+        return 0
+    fi
+
+    local required_images=(
+        "postgres:16"
+        "redis:7-alpine"
+        "ghcr.io/airweave-ai/airweave-frontend:latest"
+        "ghcr.io/airweave-ai/airweave-connect:latest"
+        "semitechnologies/transformers-inference:sentence-transformers-all-MiniLM-L6-v2"
+        "temporalio/auto-setup:1.24.2"
+        "temporalio/admin-tools:1.27.2-tctl-1.18.2-cli-1.3.0"
+        "temporalio/ui:2.26.2"
+        "vespaengine/vespa:8"
+        "svix/svix-server"
+    )
+
+    local missing_count=0
+    for image in "${required_images[@]}"; do
+        if ! $CONTAINER_CMD image inspect "$image" >/dev/null 2>&1; then
+            missing_count=$((missing_count + 1))
+        fi
+    done
+
+    if [[ $missing_count -eq 0 ]]; then
+        log_success "All required runtime images are present locally"
+        return 0
+    fi
+
+    if [[ -z $bundle_image ]]; then
+        log_error "AUTO_LOAD_BUNDLE=true but BUNDLE_IMAGE is not set"
+        return 1
+    fi
+
+    # Pull bundle image only when offline mode is disabled and image isn't present.
+    if ! $CONTAINER_CMD image inspect "$bundle_image" >/dev/null 2>&1; then
+        if [[ ${offline_mode,,} == "true" ]]; then
+            log_error "Bundle image '$bundle_image' not found locally in OFFLINE_MODE=true"
+            return 1
+        fi
+        log_note "Pulling bundle image: $bundle_image"
+        if ! $CONTAINER_CMD pull "$bundle_image"; then
+            log_error "Failed to pull bundle image '$bundle_image'"
+            return 1
+        fi
+    fi
+
+    log_note "Loading missing runtime images from bundle image"
+    if ! $CONTAINER_CMD run --rm -v /var/run/docker.sock:/var/run/docker.sock "$bundle_image"; then
+        log_error "Failed to load images from bundle image '$bundle_image'"
+        return 1
+    fi
+    log_success "Runtime images loaded from bundle image"
+}
+
 # Wait for a condition with retry count on updating line
 wait_for() {
     local description=$1
@@ -567,6 +629,11 @@ if [[ -z $SKIP_ENV_SETUP ]]; then
         log_debug "Added SKIP_AZURE_STORAGE=true"
     fi
 
+    # Optional offline bootstrap settings for runtime image bundle.
+    ensure_env_value "OFFLINE_MODE" "false" >/dev/null || true
+    ensure_env_value "AUTO_LOAD_BUNDLE" "false" >/dev/null || true
+    ensure_env_value "BUNDLE_IMAGE" "registry.mthreads.com/public/airweave:v1.0.0" >/dev/null || true
+
     # Prompt for API keys (only if not already set)
     prompt_api_key "OPENAI_API_KEY" "OpenAI API key is required for files and natural language search."
     prompt_api_key "MISTRAL_API_KEY" "Mistral API key is required for certain AI functionality."
@@ -676,14 +743,25 @@ fi
 # Start Services (skip if --restart was used)
 # -----------------------------------------------------------------------------
 if [[ -z $SKIP_CONTAINER_CREATION ]]; then
+    if ! ensure_bundle_images_loaded; then
+        exit 1
+    fi
+
     # Build compose command with profiles
     compose_args=(--env-file .env -f docker/docker-compose.yml)
     [[ $USE_LOCAL_EMBEDDINGS == true ]] && compose_args+=(--profile local-embeddings)
     [[ $USE_FRONTEND == true ]] && compose_args+=(--profile frontend)
     [[ $USE_CONNECT == true ]] && compose_args+=(--profile connect)
     [[ $USE_VESPA == true ]] && compose_args+=(--profile vespa)
+    offline_mode=${OFFLINE_MODE:-$(get_env_value "OFFLINE_MODE")}
 
-    if ! $COMPOSE_CMD "${compose_args[@]}" up -d; then
+    if [[ ${offline_mode,,} == "true" ]]; then
+        compose_up_args=(up -d --pull never)
+    else
+        compose_up_args=(up -d)
+    fi
+
+    if ! $COMPOSE_CMD "${compose_args[@]}" "${compose_up_args[@]}"; then
         log_error "Failed to start Docker services"
         echo "Check the error messages above and try running:"
         echo "  docker logs airweave-backend"
