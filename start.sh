@@ -587,12 +587,6 @@ if [[ -z $SKIP_ENV_SETUP ]]; then
 
     api_host_ip=$(get_env_value "API_HOST_IP")
     if [[ -z $api_host_ip ]]; then
-        existing_api_url=$(get_env_value "API_URL")
-        if [[ -n $existing_api_url && $existing_api_url != "auto" ]]; then
-            api_host_ip=$(extract_host_from_url "$existing_api_url")
-        fi
-    fi
-    if [[ -z $api_host_ip ]]; then
         api_host_ip="localhost"
     fi
     set_env_value "API_HOST_IP" "$api_host_ip"
