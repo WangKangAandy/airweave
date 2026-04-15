@@ -534,22 +534,56 @@ const Collections = () => {
         }
     };
 
+    const fallbackCopyText = (value: string): boolean => {
+        const textArea = document.createElement("textarea");
+        textArea.value = value;
+        textArea.setAttribute("readonly", "");
+        textArea.style.position = "fixed";
+        textArea.style.left = "-9999px";
+        document.body.appendChild(textArea);
+        textArea.select();
+        const copied = document.execCommand("copy");
+        document.body.removeChild(textArea);
+        return copied;
+    };
+
     // Handle copy to clipboard
-    const handleCopyId = () => {
-        if (collection?.readable_id) {
-            navigator.clipboard.writeText(collection.readable_id);
-            setIsCopied(true);
+    const handleCopyId = async () => {
+        const readableId = collection?.readable_id?.trim();
+        if (!readableId) return;
 
-            // Reset after animation completes
-            setTimeout(() => {
-                setIsCopied(false);
-            }, 1500);
-
-            toast({
-                title: "Copied",
-                description: "ID copied to clipboard"
-            });
+        let copied = false;
+        try {
+            if (navigator.clipboard?.writeText) {
+                await navigator.clipboard.writeText(readableId);
+                copied = true;
+            }
+        } catch {
+            copied = false;
         }
+
+        if (!copied) {
+            copied = fallbackCopyText(readableId);
+        }
+
+        if (!copied) {
+            toast({
+                title: "Copy failed",
+                description: "Unable to access clipboard. Please copy manually.",
+                variant: "destructive"
+            });
+            return;
+        }
+
+        setIsCopied(true);
+        setTimeout(() => {
+            setIsCopied(false);
+        }, 1500);
+
+        toast({
+            title: "Copied",
+            description: "ID copied to clipboard"
+        });
     };
 
     /********************************************
