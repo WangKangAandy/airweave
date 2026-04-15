@@ -62,13 +62,14 @@ class DirectAuthentication(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    credentials: Dict[str, Any] = Field(..., description="Authentication credentials")
+    credentials: Optional[Dict[str, Any]] = Field(None, description="Authentication credentials")
 
     @model_validator(mode="after")
     def validate_credentials(self):
-        """Ensure credentials are not empty."""
-        if not self.credentials:
-            raise ValueError("Credentials cannot be empty")
+        """Ensure credentials are not empty (except for sources that support no auth)."""
+        if self.credentials is None or not self.credentials:
+            # Allow empty credentials for sources like LocalGit that don't require auth
+            return self
         return self
 
 

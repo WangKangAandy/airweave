@@ -113,7 +113,7 @@ class SourceConnectionCreationService(SourceConnectionCreateServiceProtocol):
         if obj_in.name is None:
             obj_in.name = f"{entry.name} Connection"
 
-        auth_method = self._determine_auth_method(obj_in)
+        auth_method = self._determine_auth_method(obj_in, source_class)
         self._validate_auth_compatibility(source_class, entry.short_name, auth_method)
 
         if source_class.requires_byoc and auth_method == AuthenticationMethod.OAUTH_BROWSER:
@@ -316,13 +316,18 @@ class SourceConnectionCreationService(SourceConnectionCreateServiceProtocol):
     async def _create_with_direct_auth(
         self, db: AsyncSession, *, obj_in: SourceConnectionCreate, entry, ctx: ApiContext
     ) -> SourceConnectionSchema:
-        if not obj_in.authentication or not isinstance(obj_in.authentication, DirectAuthentication):
+        # For sources that support empty auth (like LocalGit), allow None authentication
+        if obj_in.authentication is None:
+            credentials = {"placeholder": "local-git"}
+        elif isinstance(obj_in.authentication, DirectAuthentication):
+            credentials = obj_in.authentication.credentials or {"placeholder": "local-git"}
+        else:
             raise HTTPException(
-                status_code=400, detail="Direct authentication requires credentials"
+                status_code=400, detail="Direct authentication requires DirectAuthentication or None"
             )
 
         validated_auth = self._source_validation.validate_auth_schema(
-            obj_in.short_name, obj_in.authentication.credentials
+            obj_in.short_name, credentials
         )
         validated_config = self._source_validation.validate_config(
             obj_in.short_name, obj_in.config, ctx
@@ -775,10 +780,14 @@ class SourceConnectionCreationService(SourceConnectionCreateServiceProtocol):
             raise HTTPException(status_code=404, detail=f"Source '{short_name}' not found") from exc
 
     @staticmethod
-    def _determine_auth_method(obj_in: SourceConnectionCreate) -> AuthenticationMethod:
+    def _determine_auth_method(obj_in: SourceConnectionCreate, source_class) -> AuthenticationMethod:
         auth = obj_in.authentication
         match auth:
             case None:
+                # When auth is None, check if source supports DIRECT with no auth
+                supported_methods = source_class.get_supported_auth_methods()
+                if AuthenticationMethod.DIRECT in supported_methods:
+                    return AuthenticationMethod.DIRECT
                 return AuthenticationMethod.OAUTH_BROWSER
             case DirectAuthentication():
                 return AuthenticationMethod.DIRECT

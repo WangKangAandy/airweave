@@ -500,6 +500,20 @@ if [[ -z $SKIP_ENV_SETUP ]]; then
         log_debug "Added POSTGRES_USER=airweave"
     fi
 
+    # Local Git mount configuration defaults
+    if ensure_env_value "LOCAL_GIT_HOST_HOME_PATH" "/home/mccxadmin"; then
+        log_debug "Added LOCAL_GIT_HOST_HOME_PATH=/home/mccxadmin"
+    fi
+    if ensure_env_value "LOCAL_GIT_HOST_DATA_PATH" "/data"; then
+        log_debug "Added LOCAL_GIT_HOST_DATA_PATH=/data"
+    fi
+    if ensure_env_value "LOCAL_GIT_MOUNT_MAPS" "/home/mccxadmin:/host_home,/data:/host_data"; then
+        log_debug "Added LOCAL_GIT_MOUNT_MAPS mapping defaults"
+    fi
+    if ensure_env_value "LOCAL_GIT_ALLOWED_HOST_ROOTS" "/home/mccxadmin,/data"; then
+        log_debug "Added LOCAL_GIT_ALLOWED_HOST_ROOTS defaults"
+    fi
+
     # Add SKIP_AZURE_STORAGE for faster local startup
     if ensure_env_value "SKIP_AZURE_STORAGE" "true"; then
         log_debug "Added SKIP_AZURE_STORAGE=true"

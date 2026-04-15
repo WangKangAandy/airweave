@@ -16,6 +16,7 @@ from airweave.api.context import ApiContext
 from airweave.api.deps import Inject
 from airweave.api.examples import create_single_source_response, create_source_list_response
 from airweave.api.router import TrailingSlashRouter
+from airweave.core.config import settings
 from airweave.domains.sources.protocols import SourceServiceProtocol
 from airweave.schemas.errors import NotFoundErrorResponse, RateLimitErrorResponse
 
@@ -49,6 +50,25 @@ async def list(
 ) -> List[schemas.Source]:
     """List all available data source connectors."""
     return await source_service.list(ctx)
+
+
+@router.get(
+    "/local-git/mount-roots",
+    response_model=schemas.LocalGitMountRootsResponse,
+    summary="Get Local Git Mount Roots",
+    description=(
+        "Return host-side root directories configured for Local Git repository selection. "
+        "Frontend can display this list as a reference for repo_path input."
+    ),
+)
+async def get_local_git_mount_roots(
+    *,
+    _ctx: ApiContext = Depends(deps.get_context),
+) -> schemas.LocalGitMountRootsResponse:
+    """Return configured host roots for Local Git path input."""
+    return schemas.LocalGitMountRootsResponse(
+        host_roots=[root for root in settings.local_git_allowed_host_roots]
+    )
 
 
 @router.get(

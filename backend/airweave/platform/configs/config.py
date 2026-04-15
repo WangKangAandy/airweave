@@ -4,6 +4,7 @@ from typing import Literal, Optional
 
 from pydantic import Field, field_validator
 
+from airweave.core.config import settings
 from airweave.platform.configs._base import BaseConfig, RequiredTemplateConfig
 from airweave.platform.utils.ssrf import validate_host, validate_url
 
@@ -172,6 +173,82 @@ class ElasticsearchConfig(SourceConfig):
     """Elasticsearch configuration schema."""
 
     pass
+
+
+class LocalGitConfig(SourceConfig):
+    """Local Git repository configuration schema."""
+
+    repo_path: str = Field(
+        ...,
+        title="Repository Path",
+        description="Local Git repository path (e.g., '/home/user/projects/my-repo' or '/Users/john/projects/cuda-migration'). Must be a valid git repository.",
+    )
+    branch: str = Field(
+        default="main",
+        title="Branch",
+        description="Specific branch to sync (e.g., 'main', 'development'). If empty, uses default branch.",
+    )
+    follow_symlinks: bool = Field(
+        default=False,
+        title="Follow Symlinks",
+        description="Whether to follow symbolic links (not recommended for large repos).",
+    )
+
+    @field_validator("repo_path")
+    @classmethod
+    def validate_repo_path(cls, v):
+        """Validate that repository path has correct format.
+
+        Note: Path existence check is skipped in Docker environments
+        since the path refers to host filesystem.
+        """
+        import os
+
+        if not v or not v.strip():
+            raise ValueError("Repository path is required")
+
+        path = v.strip()
+
+        # Check if we're in a Docker environment
+        in_docker = os.path.exists("/.dockerenv")
+
+        if in_docker:
+            # In Docker, only validate format, not existence
+            # since the path refers to the host filesystem
+            if not path.startswith("/"):
+                raise ValueError(f"Repository path must be absolute in Docker environment: {path}")
+            allowed_roots = settings.local_git_allowed_host_roots
+            if allowed_roots and not any(
+                path == root or path.startswith(f"{root}/") for root in allowed_roots
+            ):
+                allowed_display = ", ".join(allowed_roots)
+                raise ValueError(
+                    "Repository path is not under an allowed host root. "
+                    f"Allowed roots: {allowed_display}"
+                )
+            return path
+
+        # Local development: check if path exists and is a git repository
+        if not os.path.exists(path):
+            raise ValueError(f"Repository path does not exist: {path}")
+
+        if not os.path.isdir(path):
+            raise ValueError(f"Repository path must be a directory: {path}")
+
+        # Check if it's a git repository
+        git_dir = os.path.join(path, ".git")
+        if not os.path.exists(git_dir):
+            raise ValueError(f"Not a git repository: {path} (missing .git directory)")
+
+        return path
+
+    @field_validator("repo_path", mode="before")
+    @classmethod
+    def normalize_repo_path(cls, v):
+        """Normalize repository path (remove trailing slash)."""
+        if not v or not isinstance(v, str):
+            return None
+        return v.rstrip("/")
 
 
 class GitHubConfig(SourceConfig):

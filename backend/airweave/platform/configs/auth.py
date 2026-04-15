@@ -1069,3 +1069,24 @@ class EnronAuthConfig(BaseConfig):
         title="Placeholder",
         description="Internal placeholder (ignored)",
     )
+
+class LocalGitAuthConfig(BaseConfig):
+    """Local Git authentication credentials schema.
+
+    Local Git sources don't require any authentication tokens.
+    They read files directly from the local filesystem.
+    """
+
+    # Placeholder field to satisfy validation requirements (ignored during sync)
+    placeholder: str = Field(
+        default="local-git",
+        title="Placeholder",
+        description="Local Git sources don't require authentication (any value works)",
+        json_schema_extra={"exclude_from_ui": True},
+    )
+
+    @model_validator(mode="after")
+    def validate_empty_auth(self):
+        """Allow empty or default authentication."""
+        # For LocalGit, we accept empty authentication (no validation needed)
+        return self

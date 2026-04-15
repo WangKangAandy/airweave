@@ -143,3 +143,12 @@ class Source(BaseModel):
     )
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class LocalGitMountRootsResponse(BaseModel):
+    """Response schema for Local Git mount root discovery."""
+
+    host_roots: list[str] = Field(
+        default_factory=list,
+        description="Host-side root directories where Local Git repositories can be selected.",
+    )
