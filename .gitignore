@@ -87,3 +87,4 @@ coverage.xml
 monke/venv/
 logs/
 monke/.runs/
+docker/temporal-worker/assets/

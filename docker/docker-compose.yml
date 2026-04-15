@@ -251,8 +251,11 @@ services:
 
   temporal-worker:
     container_name: airweave-temporal-worker
-    # Reuse the same backend image so worker and API run identical code/dependencies.
-    image: ${BACKEND_IMAGE:-airweave-backend-local:local}
+    # Worker image with baked local semantic chunker model for offline reliability.
+    image: ${TEMPORAL_WORKER_IMAGE:-airweave-temporal-worker-model:local}
+    build:
+      context: ..
+      dockerfile: docker/temporal-worker/Dockerfile
     # Import all variables from .env file (same as backend)
     env_file:
       - ../.env
@@ -281,15 +284,12 @@ services:
       - SVIX_JWT_SECRET=local-dev-svix-jwt-secret-that-is-at-least-32-chars
     volumes:
       - ../backend:/app
-      - ${HF_MODEL_PATH:-../potion-base-32M}:/model_files:ro
       # Configurable host mounts for Local Git sources
       - ${LOCAL_GIT_HOST_HOME_PATH:-/home/mccxadmin}:/host_home
       - ${LOCAL_GIT_HOST_DATA_PATH:-/data}:/host_data
-    # 先安装 CPU 版本的 torch 和 sentence-transformers，再启动 worker
     command: >
-      sh -c "pip install torch --index-url https://download.pytorch.org/whl/cpu -q &&
-             pip install sentence-transformers model2vec -q &&
-             mkdir -p /root/.cache/huggingface/hub && cp -r /model_files /root/.cache/huggingface/hub/minishlab--potion-base-32M &&
+      sh -c "mkdir -p /root/.cache/huggingface/hub &&
+             cp -r /model_files /root/.cache/huggingface/hub/minishlab--potion-base-32M &&
              python -m airweave.domains.temporal.worker"
     entrypoint: []
     depends_on:
