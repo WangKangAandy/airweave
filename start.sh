@@ -146,6 +146,22 @@ get_env_value() {
     grep "^${key}=" .env 2>/dev/null | head -1 | cut -d'=' -f2- | tr -d '"' | tr -d "'" || true
 }
 
+extract_host_from_url() {
+    local raw=$1
+    # Supports:
+    # - http://host:port/path
+    # - https://host:port/path
+    # - host:port
+    # - host
+    if [[ $raw =~ ^https?:// ]]; then
+        echo "$raw" | sed -E 's#^https?://([^/:]+).*$#\1#'
+    elif [[ $raw == *:* ]]; then
+        echo "$raw" | cut -d':' -f1
+    else
+        echo "$raw"
+    fi
+}
+
 set_env_value() {
     local key=$1 value=$2
     local tmp_file
@@ -499,6 +515,38 @@ if [[ -z $SKIP_ENV_SETUP ]]; then
     if ensure_env_value "POSTGRES_USER" "airweave"; then
         log_debug "Added POSTGRES_USER=airweave"
     fi
+
+    # Single-source network settings for local deployment URLs.
+    # API_HOST_IP is the only host source; URLs below are derived automatically.
+    ensure_env_value "API_URL_SCHEME" "http" >/dev/null || true
+    ensure_env_value "API_BACKEND_PORT" "8001" >/dev/null || true
+    ensure_env_value "API_FRONTEND_PORT" "8080" >/dev/null || true
+    ensure_env_value "API_CONNECT_PORT" "8082" >/dev/null || true
+
+    api_host_ip=$(get_env_value "API_HOST_IP")
+    if [[ -z $api_host_ip ]]; then
+        existing_api_url=$(get_env_value "API_URL")
+        if [[ -n $existing_api_url && $existing_api_url != "auto" ]]; then
+            api_host_ip=$(extract_host_from_url "$existing_api_url")
+        fi
+    fi
+    if [[ -z $api_host_ip ]]; then
+        api_host_ip="localhost"
+    fi
+    set_env_value "API_HOST_IP" "$api_host_ip"
+
+    api_url_scheme=$(get_env_value "API_URL_SCHEME")
+    api_backend_port=$(get_env_value "API_BACKEND_PORT")
+    api_frontend_port=$(get_env_value "API_FRONTEND_PORT")
+
+    derived_api_url="${api_url_scheme}://${api_host_ip}:${api_backend_port}"
+    derived_app_url="${api_url_scheme}://${api_host_ip}:${api_frontend_port}"
+
+    set_env_value "API_URL" "$derived_api_url"
+    set_env_value "API_FULL_URL" "$derived_api_url"
+    set_env_value "APP_FULL_URL" "$derived_app_url"
+    set_env_value "ADDITIONAL_CORS_ORIGINS" "$derived_app_url"
+    log_success "Derived API URLs from API_HOST_IP=${api_host_ip}"
 
     # Local Git mount configuration defaults
     if ensure_env_value "LOCAL_GIT_HOST_HOME_PATH" "/home/mccxadmin"; then

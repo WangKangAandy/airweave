@@ -203,11 +203,37 @@ services:
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
-        temporal operator search-attribute create \
-          --name SyncId --type Keyword \
+        set -eu
+        ATTEMPTS=20
+        SLEEP_SECONDS=2
+
+        i=1
+        while [ "$$i" -le "$$ATTEMPTS" ]; do
+          # Create is idempotent: may fail if already exists, which is acceptable.
+          temporal operator search-attribute create \
+            --name SyncId --type Keyword \
+            --namespace default \
+            --address temporal:7233 >/tmp/syncid-create.log 2>&1 || true
+
+          # Verify mapping exists in namespace before succeeding.
+          if temporal operator search-attribute list \
+            --namespace default \
+            --address temporal:7233 \
+            | awk '/SyncId/ {found=1} END {exit(found ? 0 : 1)}'; then
+            echo "SyncId search attribute registered"
+            exit 0
+          fi
+
+          echo "SyncId mapping not visible yet (attempt $$i/$$ATTEMPTS), retrying..."
+          i=$$(($$i + 1))
+          sleep "$$SLEEP_SECONDS"
+        done
+
+        echo "ERROR: SyncId search attribute registration verification failed after $$ATTEMPTS attempts"
+        temporal operator search-attribute list \
           --namespace default \
           --address temporal:7233 || true
-        echo "SyncId search attribute registered"
+        exit 1
     restart: "no"
 
   temporal-ui:
@@ -298,7 +324,10 @@ services:
   # This runs once after vespa is healthy, then exits
   vespa-init:
     container_name: airweave-vespa-init
-    image: alpine:3.19
+    image: ${VESPA_INIT_IMAGE:-airweave-vespa-init-local:local}
+    build:
+      context: ..
+      dockerfile: docker/vespa-init/Dockerfile
     env_file:
       - ../.env
     volumes:

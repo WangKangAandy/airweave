@@ -3,15 +3,6 @@
 # This script waits for Vespa to be ready and deploys the application package
 set -e
 
-# Install required packages (curl and zip)
-echo "Installing curl and zip..."
-apk add --no-cache curl zip || {
-    echo "ERROR: Failed to install curl and zip"
-    echo "This might be due to network issues or APK repository problems"
-    exit 1
-}
-echo "Successfully installed curl and zip"
-
 CONFIG_SERVER="${VESPA_CONFIG_SERVER:-http://vespa:19071}"
 APP_DIR="/app"
 BUILD_DIR="/tmp/vespa-build"
