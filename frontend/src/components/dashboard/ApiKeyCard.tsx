@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Check, Copy, Key, Plus } from "lucide-react";
 import { toast } from "sonner";
-import { useAPIKeysStore } from "@/lib/stores/apiKeys";
+import { apiClient } from "@/lib/api";
+import { APIKey, useAPIKeysStore } from "@/lib/stores/apiKeys";
 import { useOrganizationContext } from "@/hooks/use-organization-context";
 
 export const ApiKeyCard = () => {
@@ -26,13 +27,58 @@ export const ApiKeyCard = () => {
     }
   }, [canManage, fetchAPIKeys]);
 
-  const handleCopyApiKey = (key: string) => {
-    if (key) {
-      navigator.clipboard.writeText(key);
+  const fallbackCopyText = (value: string): boolean => {
+    const textArea = document.createElement("textarea");
+    textArea.value = value;
+    textArea.setAttribute("readonly", "");
+    textArea.style.position = "fixed";
+    textArea.style.left = "-9999px";
+    document.body.appendChild(textArea);
+    textArea.select();
+    const copied = document.execCommand("copy");
+    document.body.removeChild(textArea);
+    return copied;
+  };
+
+  const copyToClipboard = async (value: string): Promise<boolean> => {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(value);
+        return true;
+      }
+    } catch {
+      // Fall back to execCommand when Clipboard API is blocked/insecure.
+    }
+
+    return fallbackCopyText(value);
+  };
+
+  const handleCopyApiKey = async (apiKey: APIKey) => {
+    let keyToCopy = apiKey.decrypted_key?.trim() ?? "";
+
+    // Dashboard list can contain masked values; fetch by id to get full key before copying.
+    if (!keyToCopy || keyToCopy.includes("*")) {
+      const response = await apiClient.get(`/api-keys/${apiKey.id}`);
+      if (response.ok) {
+        const latest = await response.json();
+        keyToCopy = typeof latest?.decrypted_key === "string" ? latest.decrypted_key.trim() : "";
+      }
+    }
+
+    if (!keyToCopy || keyToCopy.includes("*")) {
+      toast.error("Unable to copy full API key. Please create or rotate a key from API Keys.");
+      return;
+    }
+
+    const copied = await copyToClipboard(keyToCopy);
+    if (copied) {
       setCopySuccess(true);
       toast.success("API key copied to clipboard");
       setTimeout(() => setCopySuccess(false), 2000);
+      return;
     }
+
+    toast.error("Clipboard access failed. Please copy from API Keys page.");
   };
 
   const handleCreateAPIKey = async () => {
@@ -46,13 +92,6 @@ export const ApiKeyCard = () => {
     } finally {
       setIsCreating(false);
     }
-  };
-
-  const maskApiKey = (key: string) => {
-    if (!key) return "";
-    const firstFour = key.substring(0, 4);
-    const masked = Array(key.length - 4).fill("*").join("");
-    return `${firstFour}${masked}`;
   };
 
   // Get the most recent API key
@@ -81,7 +120,8 @@ export const ApiKeyCard = () => {
           <>
             <div className="flex items-center">
               <Input
-                value={maskApiKey(latestApiKey.decrypted_key)}
+                // Temporary debug mode: show full API key directly instead of masked value.
+                value={latestApiKey.decrypted_key ?? ""}
                 className="text-xs font-mono h-9 bg-background border-border"
                 readOnly
               />
@@ -89,7 +129,7 @@ export const ApiKeyCard = () => {
                 variant="ghost"
                 size="icon"
                 className="ml-1 h-9 w-9 relative"
-                onClick={() => handleCopyApiKey(latestApiKey.decrypted_key)}
+                onClick={() => void handleCopyApiKey(latestApiKey)}
               >
                 <div className="relative">
                   <Copy className={`h-3.5 w-3.5 transition-all duration-200 ${copySuccess ? 'opacity-0 scale-75' : 'opacity-100 scale-100'}`} />
