@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCollectionCreationStore, AuthMode } from '@/stores/collectionCreationStore';
 import { apiClient } from '@/lib/api';
@@ -91,10 +91,12 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
   const [authFields, setAuthFields] = useState<Record<string, string>>({});
   const [configData, setConfigData] = useState<Record<string, string | string[] | boolean>>({});
   const [useOwnCredentials, setUseOwnCredentials] = useState(false);
-  // Initialize connection name from store or with source default
+  // Initialize connection name from store only.
+  // If empty, we show source-based placeholder and fall back to default on submit.
   const [connectionName, setConnectionName] = useState(
-    sourceConnectionName || (sourceName ? `${sourceName} Connection` : '')
+    sourceConnectionName || ''
   );
+  const hasNormalizedLegacyDefaultName = useRef(false);
   const [clientId, setClientId] = useState('');
   const [clientSecret, setClientSecret] = useState('');
   const [customRedirectUrl, setCustomRedirectUrl] = useState('');
@@ -125,14 +127,20 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
     }
   }, [connectionName]); // Only depend on connectionName changes
 
-  // Update connection name when source changes (when user goes back and selects different source)
+  // One-time migration for persisted modal state:
+  // previous behavior stored `${sourceName} Connection` as an actual value.
+  // Convert that legacy auto-filled value to empty so placeholder UX can show.
   useEffect(() => {
-    if (sourceName && !sourceConnectionName) {
-      // Only set default name if no custom name is set
-      const defaultName = `${sourceName} Connection`;
-      setConnectionName(defaultName);
+    if (hasNormalizedLegacyDefaultName.current || !sourceName) return;
+
+    const defaultName = `${sourceName} Connection`;
+    if (sourceConnectionName === defaultName && connectionName === defaultName) {
+      setConnectionName('');
+      setSourceConnectionName('');
     }
-  }, [sourceName, sourceConnectionName]);
+
+    hasNormalizedLegacyDefaultName.current = true;
+  }, [sourceName, sourceConnectionName, connectionName, setSourceConnectionName]);
 
   const [connectionUrl, setConnectionUrl] = useState('');
 
@@ -297,9 +305,9 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
 
   // Check if form is valid for submission
   const isFormValid = () => {
-    // Must have a valid connection name (4-42 characters)
-    const trimmedName = connectionName.trim();
-    if (!trimmedName || trimmedName.length < 4 || trimmedName.length > 42) return false;
+    // Use user input if provided, otherwise fall back to source-based default name.
+    const effectiveName = connectionName.trim() || (sourceName ? `${sourceName} Connection` : '');
+    if (!effectiveName || effectiveName.length < 4 || effectiveName.length > 42) return false;
 
     // Check if custom redirect URL is valid (if provided)
     if (authMode === 'oauth2' && customRedirectUrl) {
@@ -365,9 +373,9 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
     setIsCreating(true);
 
     try {
-      // Validate connection name
-      if (!connectionName.trim()) {
-        toast.error('Please enter a connection name');
+      const effectiveName = connectionName.trim() || (sourceName ? `${sourceName} Connection` : '');
+      if (!effectiveName) {
+        toast.error('Unable to determine a connection name');
         setIsCreating(false);
         return;
       }
@@ -431,7 +439,7 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
       }
 
       const payload: any = {
-        name: connectionName.trim(),
+        name: effectiveName,
         description: `${sourceName} connection for ${collectionName}`,
         short_name: selectedSource,
         readable_collection_id: isAddingToExisting ? existingCollectionId : collectionId,
@@ -601,7 +609,7 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
                         setConnectionName(value);
                         setSourceConnectionName(value);
                       }}
-                      placeholder="Enter connection name"
+                      placeholder={sourceName ? `${sourceName} Connection` : 'Enter connection name'}
                       validation={sourceConnectionNameValidation}
                       className={cn(
                         "focus:border-gray-400 dark:focus:border-gray-600",
