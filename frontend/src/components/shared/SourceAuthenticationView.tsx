@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { toast } from 'sonner';
-import { Copy, ArrowRight, Loader2, Settings, RefreshCw } from 'lucide-react';
+import { Copy, ArrowRight, Loader2, Settings, RefreshCw, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/lib/theme-provider';
 import { getAppIconUrl } from '@/lib/utils/icons';
@@ -35,6 +35,7 @@ export const SourceAuthenticationView: React.FC<SourceAuthenticationViewProps> =
   const isDark = resolvedTheme === 'dark';
   const [copied, setCopied] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const copyToClipboard = () => {
     if (authenticationUrl) {
@@ -52,6 +53,21 @@ export const SourceAuthenticationView: React.FC<SourceAuthenticationViewProps> =
       setTimeout(() => {
         window.location.href = authenticationUrl;
       }, 100);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!onDelete || isDeleting) return;
+    const confirmed = window.confirm(
+      "Delete this source connection?\n\nThis removes the failed connection so you can recreate it cleanly."
+    );
+    if (!confirmed) return;
+
+    setIsDeleting(true);
+    try {
+      await onDelete();
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -297,6 +313,32 @@ export const SourceAuthenticationView: React.FC<SourceAuthenticationViewProps> =
                 </Tooltip>
               </TooltipProvider>
             </div>
+
+            {/* Utility action for failed/pending OAuth connections */}
+            {onDelete && (
+              <div className="flex justify-start">
+                <button
+                  onClick={handleDelete}
+                  disabled={isDeleting}
+                  className={cn(
+                    "inline-flex items-center gap-2 text-xs font-medium",
+                    "px-3 py-1.5 rounded-md border transition-all",
+                    isDeleting
+                      ? "opacity-50 cursor-not-allowed"
+                      : isDark
+                        ? "border-red-900/60 text-red-400 hover:bg-red-900/20"
+                        : "border-red-200 text-red-600 hover:bg-red-50"
+                  )}
+                >
+                  {isDeleting ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-3.5 w-3.5" />
+                  )}
+                  <span>{isDeleting ? 'Deleting...' : 'Delete connection'}</span>
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Connection Visual - Between Connect directly and bottom */}

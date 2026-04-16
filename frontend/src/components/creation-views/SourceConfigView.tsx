@@ -403,9 +403,9 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
         }
       } else if (authMode === 'oauth2') {
         // OAuth flow (OAuth1 or OAuth2)
-        authentication = {
-          ...(customRedirectUrl.trim() ? { redirect_uri: customRedirectUrl.trim() } : {}),
-        };
+        authentication = customRedirectUrl.trim()
+          ? { redirect_uri: customRedirectUrl.trim() }
+          : null;
 
         // Add credentials if BYOC or user chose to use own credentials
         if (requiresCustomOAuth() || useOwnCredentials) {
@@ -418,9 +418,11 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
 
           // OAuth1 uses consumer_key/consumer_secret, OAuth2 uses client_id/client_secret
           if (isOAuth1()) {
+            if (authentication === null) authentication = {};
             authentication.consumer_key = clientId;
             authentication.consumer_secret = clientSecret;
           } else {
+            if (authentication === null) authentication = {};
             authentication.client_id = clientId;
             authentication.client_secret = clientSecret;
           }
