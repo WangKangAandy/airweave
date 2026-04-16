@@ -504,12 +504,6 @@ const SourceConnectionStateView: React.FC<Props> = ({
       if (onConnectionDeleted) {
         onConnectionDeleted();
       }
-
-      // Open the add source flow if collection info is available
-      if (collectionId && collectionName) {
-        const store = useCollectionCreationStore.getState();
-        store.openForAddToCollection(collectionId, collectionName);
-      }
     } catch (error) {
       console.error('Error deleting source connection:', error);
       toast({
