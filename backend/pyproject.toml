@@ -91,6 +91,7 @@ pyjwt = "^2.10.1"
 mistral_common = {version = "1.8.8", extras = ["sentencepiece"]}
 google-cloud-storage = "^3.8.0"
 authlib = ">=1.6.9"
+lark-oapi = "^1.4.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"

@@ -9,6 +9,7 @@ HTTP routing that delegates to the service and converts results to API
 schemas.
 """
 
+import logging
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
@@ -37,6 +38,8 @@ from airweave.schemas.webhooks import (
 )
 
 router = APIRouter()
+
+logger = logging.getLogger(__name__)
 
 
 @router.get(

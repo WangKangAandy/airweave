@@ -916,6 +916,25 @@ class FreshdeskAuthConfig(AuthConfig):
     )
 
 
+class FeishuAuthConfig(AuthConfig):
+    """Feishu authentication credentials schema.
+
+    Uses app_id + app_secret to exchange tenant_access_token via:
+    /open-apis/auth/v3/tenant_access_token/internal
+    """
+
+    app_id: str = Field(
+        title="App ID",
+        description="Feishu app_id from your Feishu Open Platform app.",
+        min_length=5,
+    )
+    app_secret: str = Field(
+        title="App Secret",
+        description="Feishu app_secret from your Feishu Open Platform app.",
+        min_length=10,
+    )
+
+
 class TodoistAuthConfig(OAuth2AuthConfig):
     """Todoist authentication credentials schema."""
 

@@ -82,6 +82,10 @@ class CollectionMetadataBuilder:
             "An AI meeting assistant that records, transcribes, and summarizes "
             "conversations from video calls."
         ),
+        "feishu": (
+            "Feishu (Lark) cloud documents and knowledge content synced from a configured "
+            "Drive folder, including Docx document text and metadata."
+        ),
         "freshdesk": (
             "An AI-powered customer support platform with ticketing, automation, and "
             "multi-channel helpdesk tools."

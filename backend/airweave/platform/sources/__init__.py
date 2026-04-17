@@ -16,6 +16,7 @@ from .dropbox import DropboxSource
 from .enron import EnronSource
 from .exception_stub import ExceptionStubSource
 from .file_stub import FileStubSource
+from .feishu import FeishuSource
 from .fireflies import FirefliesSource
 from .freshdesk import FreshdeskSource
 from .github import GitHubSource
@@ -85,6 +86,7 @@ ALL_SOURCES: list[type] = [
     EnronSource,
     ExceptionStubSource,
     FileStubSource,
+    FeishuSource,
     FirefliesSource,
     FreshdeskSource,
     GitHubSource,

@@ -1,6 +1,8 @@
 """Configuration classes for platform components."""
 
+import re
 from typing import Literal, Optional
+from urllib.parse import urlparse
 
 from pydantic import Field, field_validator
 
@@ -141,6 +143,54 @@ class FirefliesConfig(SourceConfig):
     Syncs meeting transcripts (mine: true) from the Fireflies GraphQL API.
     No additional config required for basic sync.
     """
+
+
+class FeishuConfig(SourceConfig):
+    """Feishu Docx configuration schema."""
+
+    folder_token: str = Field(
+        ...,
+        title="Feishu Folder Link",
+        description=(
+            "Paste the Feishu folder share link (or folder token). "
+            "Airweave will automatically extract the folder token."
+        ),
+        min_length=5,
+    )
+    max_folder_depth: int = Field(
+        default=5,
+        title="Max Folder Depth",
+        description="Maximum nested folder depth to traverse under folder_token.",
+        ge=1,
+        le=20,
+    )
+    @field_validator("folder_token", mode="before")
+    @classmethod
+    def normalize_folder_token(cls, value: str) -> str:
+        """Accept raw token or Feishu share URL and normalize to folder token."""
+        if value is None:
+            raise ValueError("folder_token is required")
+
+        raw = str(value).strip()
+        if not raw:
+            raise ValueError("folder_token is required")
+
+        # Raw token input stays unchanged.
+        if "/" not in raw and "?" not in raw:
+            return raw
+
+        parsed = urlparse(raw)
+        path = parsed.path or ""
+        # Match: /drive/folder/<token>
+        match = re.search(r"/drive/folder/([A-Za-z0-9_-]+)", path)
+        if match:
+            return match.group(1)
+
+        # If URL-like input is provided but no folder token can be extracted, fail fast.
+        raise ValueError(
+            "Invalid Feishu folder link. Expected format: "
+            "https://my.feishu.cn/drive/folder/<folder_token>"
+        )
 
 
 class Document360Config(SourceConfig):

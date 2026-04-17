@@ -291,14 +291,18 @@ export const SourceConnectionSettings: React.FC<SourceConnectionSettingsProps> =
       if (field.required) {
         const value = editFormData.config_fields[field.name];
 
-        if (field.type === 'array') {
+        if (field.type === 'boolean') {
+          if (value === undefined || value === null) {
+            return false;
+          }
+        } else if (field.type === 'array') {
           // For arrays, check if it has at least one item
           if (!value || !Array.isArray(value) || value.length === 0) {
             return false;
           }
         } else {
           // For other types, check if value exists and is not empty
-          if (!value || String(value).trim() === '') {
+          if (value === undefined || value === null || String(value).trim() === '') {
             return false;
           }
         }

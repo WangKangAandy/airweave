@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { TagInput } from '@/components/ui/tag-input';
+import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import { getAppIconUrl } from '@/lib/utils/icons';
 import { Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react';
@@ -48,6 +49,13 @@ export const EditSourceConnectionDialog: React.FC<EditSourceConnectionDialogProp
     isDark,
     resolvedTheme
 }) => {
+    const extractFeishuFolderToken = (input: string): string => {
+        const raw = input.trim();
+        if (!raw) return raw;
+        const match = raw.match(/\/drive\/folder\/([A-Za-z0-9_-]+)/);
+        return match?.[1] || raw;
+    };
+
     const editIconSrc = getAppIconUrl(sourceConnection?.short_name || "", resolvedTheme);
     const { error: editIconError, onError: onEditIconError } = useImageFallback(editIconSrc);
 
@@ -232,9 +240,25 @@ export const EditSourceConnectionDialog: React.FC<EditSourceConnectionDialogProp
                                                             placeholder={`Enter ${field.title?.toLowerCase() || field.name} and press Enter...`}
                                                             transformInput={sourceDetails?.short_name === 'jira' && field.name === 'project_keys' ? (v) => v.toUpperCase() : undefined}
                                                         />
+                                                    ) : field.type === 'boolean' ? (
+                                                        <div className="flex items-center gap-2 pt-0.5">
+                                                            <Switch
+                                                                checked={Boolean(editFormData.config_fields[field.name])}
+                                                                onCheckedChange={(checked) => setEditFormData((prev: any) => ({
+                                                                    ...prev,
+                                                                    config_fields: {
+                                                                        ...prev.config_fields,
+                                                                        [field.name]: checked
+                                                                    }
+                                                                }))}
+                                                            />
+                                                            <span className="text-xs text-muted-foreground">
+                                                                {editFormData.config_fields[field.name] ? 'On' : 'Off'}
+                                                            </span>
+                                                        </div>
                                                     ) : (
                                                         <Input
-                                                            type={field.type === 'integer' ? 'number' : 'text'}
+                                                            type={field.type === 'integer' || field.type === 'number' ? 'number' : 'text'}
                                                             className={cn(
                                                                 "w-full h-8 px-3 text-xs rounded-md border bg-transparent",
                                                                 isDark
@@ -242,12 +266,23 @@ export const EditSourceConnectionDialog: React.FC<EditSourceConnectionDialogProp
                                                                     : "border-gray-300 focus:border-blue-500",
                                                                 "focus:outline-none"
                                                             )}
-                                                            value={editFormData.config_fields[field.name] || ''}
+                                                            value={
+                                                                editFormData.config_fields[field.name] === undefined || editFormData.config_fields[field.name] === null
+                                                                    ? ''
+                                                                    : String(editFormData.config_fields[field.name])
+                                                            }
                                                             onChange={(e) => setEditFormData((prev: any) => ({
                                                                 ...prev,
                                                                 config_fields: {
                                                                     ...prev.config_fields,
-                                                                    [field.name]: e.target.value
+                                                                    [field.name]: field.type === 'integer' || field.type === 'number'
+                                                                        ? (e.target.value === '' ? '' : Number(e.target.value))
+                                                                        : (
+                                                                            sourceConnection?.short_name === 'feishu' &&
+                                                                            field.name === 'folder_token'
+                                                                                ? extractFeishuFolderToken(e.target.value)
+                                                                                : e.target.value
+                                                                        )
                                                                 }
                                                             }))}
                                                             placeholder={`Enter ${field.title || field.name}`}

@@ -50,6 +50,13 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ context }) =
 
     const { authProviderConnections, isLoadingConnections, fetchAuthProviderConnections } = useAuthProvidersStore();
 
+    const extractFeishuFolderToken = (input: string): string => {
+        const raw = input.trim();
+        if (!raw) return raw;
+        const match = raw.match(/\/drive\/folder\/([A-Za-z0-9_-]+)/);
+        return match?.[1] || raw;
+    };
+
 
     const isTokenField = (fieldName: string): boolean => {
         const lowerName = fieldName.toLowerCase();
@@ -79,7 +86,12 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ context }) =
                     if (data.config_fields?.fields) {
                         const initialConfig: Record<string, any> = {};
                         data.config_fields.fields.forEach((field: any) => {
-                            if (field.name) initialConfig[field.name] = '';
+                            if (!field.name) return;
+                            if (field.type === 'boolean') {
+                                initialConfig[field.name] = false;
+                            } else {
+                                initialConfig[field.name] = '';
+                            }
                         });
                         setConfigValues(initialConfig);
                     }
@@ -226,11 +238,36 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ context }) =
                                         placeholder={`Enter ${field.title?.toLowerCase() || field.name} and press Enter...`}
                                         transformInput={sourceDetails?.short_name === 'jira' && field.name === 'project_keys' ? (v) => v.toUpperCase() : undefined}
                                     />
+                                ) : field.type === 'boolean' ? (
+                                    <div className="flex items-center gap-2 mt-1">
+                                        <Switch
+                                            checked={Boolean(configValues[field.name])}
+                                            onCheckedChange={(checked) => {
+                                                setConfigValues((prev) => ({ ...prev, [field.name]: checked }));
+                                            }}
+                                        />
+                                        <span className="text-xs text-muted-foreground">{configValues[field.name] ? 'On' : 'Off'}</span>
+                                    </div>
                                 ) : (
                                     <input
-                                        type="text"
-                                        value={configValues[field.name] || ''}
-                                        onChange={(e) => handleFieldChange(setConfigValues)(field.name, e.target.value)}
+                                        type={field.type === 'number' || field.type === 'integer' ? 'number' : 'text'}
+                                        value={
+                                            configValues[field.name] === undefined || configValues[field.name] === null
+                                                ? ''
+                                                : String(configValues[field.name])
+                                        }
+                                        onChange={(e) => {
+                                            const raw = e.target.value;
+                                            const normalizedRaw =
+                                                sourceDetails?.short_name === 'feishu' && field.name === 'folder_token'
+                                                    ? extractFeishuFolderToken(raw)
+                                                    : raw;
+                                            const v =
+                                                field.type === 'number' || field.type === 'integer'
+                                                    ? (normalizedRaw === '' ? '' : Number(normalizedRaw))
+                                                    : normalizedRaw;
+                                            setConfigValues((prev) => ({ ...prev, [field.name]: v }));
+                                        }}
                                         className={cn("w-full p-2 mt-1 rounded border", isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-300")}
                                     />
                                 )}
