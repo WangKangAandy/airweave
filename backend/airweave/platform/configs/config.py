@@ -150,10 +150,10 @@ class FeishuConfig(SourceConfig):
 
     folder_token: str = Field(
         ...,
-        title="Feishu Folder Link",
+        title="Feishu Links",
         description=(
-            "Paste the Feishu folder share link (or folder token). "
-            "Airweave will automatically extract the folder token."
+            "Paste one or more Feishu links/tokens (Folder / Wiki / Docx). "
+            "Separate items with spaces, commas, semicolons, or new lines."
         ),
         min_length=5,
     )
@@ -167,7 +167,7 @@ class FeishuConfig(SourceConfig):
     @field_validator("folder_token", mode="before")
     @classmethod
     def normalize_folder_token(cls, value: str) -> str:
-        """Accept raw token or Feishu share URL and normalize to folder token."""
+        """Accept one or more Feishu links/tokens and normalize as comma-separated entries."""
         if value is None:
             raise ValueError("folder_token is required")
 
@@ -175,22 +175,62 @@ class FeishuConfig(SourceConfig):
         if not raw:
             raise ValueError("folder_token is required")
 
-        # Raw token input stays unchanged.
-        if "/" not in raw and "?" not in raw:
-            return raw
+        parts = [part for part in re.split(r"[\s,;，；]+", raw) if part]
+        if not parts:
+            raise ValueError("folder_token is required")
 
-        parsed = urlparse(raw)
-        path = parsed.path or ""
-        # Match: /drive/folder/<token>
-        match = re.search(r"/drive/folder/([A-Za-z0-9_-]+)", path)
-        if match:
-            return match.group(1)
+        invalid: list[str] = []
+        normalized: list[str] = []
+        for part in parts:
+            lowered = part.lower()
+            if lowered.startswith("folder:"):
+                token = part.split(":", 1)[1].strip()
+                if token:
+                    normalized.append(f"folder:{token}")
+                    continue
+            if lowered.startswith("wiki:"):
+                token = part.split(":", 1)[1].strip()
+                if token:
+                    normalized.append(f"wiki:{token}")
+                    continue
+            if lowered.startswith("docx:"):
+                token = part.split(":", 1)[1].strip()
+                if token:
+                    normalized.append(f"docx:{token}")
+                    continue
 
-        # If URL-like input is provided but no folder token can be extracted, fail fast.
-        raise ValueError(
-            "Invalid Feishu folder link. Expected format: "
-            "https://my.feishu.cn/drive/folder/<folder_token>"
-        )
+            parsed = urlparse(part)
+            path = parsed.path or ""
+
+            folder = re.search(r"/drive/folder/([A-Za-z0-9_-]+)", path)
+            wiki = re.search(r"/wiki/([A-Za-z0-9_-]+)", path)
+            docx = re.search(r"/docx/([A-Za-z0-9_-]+)", path)
+
+            if folder:
+                normalized.append(f"folder:{folder.group(1)}")
+            elif wiki:
+                normalized.append(f"wiki:{wiki.group(1)}")
+            elif docx:
+                normalized.append(f"docx:{docx.group(1)}")
+            elif "/" not in part and "?" not in part:
+                token = part.strip()
+                if token.lower().startswith("wik"):
+                    normalized.append(f"wiki:{token}")
+                elif token.lower().startswith("dox"):
+                    normalized.append(f"docx:{token}")
+                else:
+                    # Backward compatible default for plain tokens.
+                    normalized.append(f"folder:{token}")
+            else:
+                invalid.append(part)
+
+        if invalid:
+            joined = ", ".join(invalid[:3])
+            more = "" if len(invalid) <= 3 else f" (+{len(invalid) - 3} more)"
+            raise ValueError(f"Invalid Feishu link/token: {joined}{more}")
+
+        # Canonical representation used by the source parser.
+        return ",".join(dict.fromkeys(normalized))
 
 
 class Document360Config(SourceConfig):

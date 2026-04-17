@@ -30,6 +30,7 @@ from airweave.platform.entities.feishu import FeishuDocxEntity, _parse_dt
 from airweave.platform.http_client.airweave_client import AirweaveHttpClient
 from airweave.platform.sources._base import BaseSource
 from airweave.platform.sources.http_helpers import raise_for_status
+from airweave.platform.sources.resolvers.feishu import FeishuEntryResolver
 from airweave.platform.sources.retry_helpers import (
     retry_if_rate_limit_or_timeout,
     wait_rate_limit_with_backoff,
@@ -76,20 +77,30 @@ class FeishuSource(BaseSource):
     ) -> FeishuSource:
         """Create and configure a Feishu source instance."""
         instance = cls(auth=auth, logger=logger, http_client=http_client)
-        instance.folder_token = config.folder_token
+        instance.entry_input = config.folder_token
         instance.max_folder_depth = config.max_folder_depth
+        instance.entry_resolver = FeishuEntryResolver(instance)
         return instance
 
     async def validate(self) -> None:
         """Validate credentials and folder access."""
         token = await self._get_access_token()
-        # _list_files is an async generator; consume at least one page to validate access.
-        async for _ in self._list_files(
-            folder_token=self.folder_token,
-            access_token=token,
-            page_size=1,
-        ):
-            break
+        resolved = await self.entry_resolver.resolve_many(self.entry_input, access_token=token)
+        if resolved.invalid_entries:
+            raise ValueError(f"Invalid Feishu entries: {', '.join(resolved.invalid_entries[:3])}")
+        if not resolved.resolved_entries:
+            raise ValueError("No valid Feishu entries provided")
+
+        for entry in resolved.resolved_entries:
+            if entry.entry_type == "folder":
+                async for _ in self._list_files(
+                    folder_token=entry.token,
+                    access_token=token,
+                    page_size=1,
+                ):
+                    break
+            elif entry.entry_type == "docx":
+                await self._get_doc_title(doc_token=entry.token, access_token=token)
 
     async def _get_access_token(self) -> str:
         """Return an access token for Feishu API requests."""
@@ -221,28 +232,33 @@ class FeishuSource(BaseSource):
                 last_epoch = 0
 
         access_token = await self._get_access_token()
+        resolved = await self.entry_resolver.resolve_many(self.entry_input, access_token=access_token)
+        if resolved.invalid_entries:
+            self.logger.warning(
+                "feishu: skipped invalid entries: %s",
+                ", ".join(resolved.invalid_entries),
+            )
         global_max_epoch = last_epoch
+        seen_doc_tokens: set[str] = set()
 
-        async for doc in self._walk_folder(
-            folder_token=self.folder_token,
-            access_token=access_token,
-            depth=0,
-        ):
+        async def emit_doc(doc: Dict[str, Any], *, fallback_epoch: int = 0) -> AsyncGenerator[BaseEntity, None]:
+            nonlocal global_max_epoch
             doc_token = doc.get("token", "")
-            if not doc_token:
-                continue
+            if not doc_token or doc_token in seen_doc_tokens:
+                return
+            seen_doc_tokens.add(doc_token)
 
-            doc_epoch = _drive_modified_epoch(doc)
+            doc_epoch = _drive_modified_epoch(doc) or fallback_epoch
             global_max_epoch = max(global_max_epoch, doc_epoch)
 
             # Incremental: skip unchanged documents (no title/raw_content calls).
-            if last_epoch > 0 and doc_epoch <= last_epoch:
-                continue
+            if last_epoch > 0 and doc_epoch > 0 and doc_epoch <= last_epoch:
+                return
 
             title = await self._get_doc_title(doc_token=doc_token, access_token=access_token)
             content = await self._get_doc_content(doc_token=doc_token, access_token=access_token)
             if not content.strip():
-                continue
+                return
 
             yield FeishuDocxEntity(
                 entity_id=doc_token,
@@ -259,6 +275,27 @@ class FeishuSource(BaseSource):
                 created_time=_parse_dt(doc.get("created_time")),
                 updated_time=_parse_dt(doc.get("modified_time")),
             )
+
+        for entry in resolved.resolved_entries:
+            if entry.entry_type == "folder":
+                async for doc in self._walk_folder(
+                    folder_token=entry.token,
+                    access_token=access_token,
+                    depth=0,
+                ):
+                    async for entity in emit_doc(doc):
+                        yield entity
+            elif entry.entry_type == "docx":
+                synthetic_doc = {
+                    "token": entry.token,
+                    "parent_token": "",
+                    "owner_id": "",
+                    "url": f"https://my.feishu.cn/docx/{entry.token}",
+                    "created_time": "",
+                    "modified_time": str(entry.modified_epoch) if entry.modified_epoch else "",
+                }
+                async for entity in emit_doc(synthetic_doc, fallback_epoch=entry.modified_epoch):
+                    yield entity
 
         if cursor:
             cursor.update(last_max_modified_epoch=str(global_max_epoch))

@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils';
 import { getAppIconUrl } from '@/lib/utils/icons';
 import { Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { parseFeishuEntries } from '@/components/shared/views/panel/source-config-extensions/feishu';
 
 interface EditSourceConnectionDialogProps {
     open: boolean;
@@ -49,13 +50,6 @@ export const EditSourceConnectionDialog: React.FC<EditSourceConnectionDialogProp
     isDark,
     resolvedTheme
 }) => {
-    const extractFeishuFolderToken = (input: string): string => {
-        const raw = input.trim();
-        if (!raw) return raw;
-        const match = raw.match(/\/drive\/folder\/([A-Za-z0-9_-]+)/);
-        return match?.[1] || raw;
-    };
-
     const editIconSrc = getAppIconUrl(sourceConnection?.short_name || "", resolvedTheme);
     const { error: editIconError, onError: onEditIconError } = useImageFallback(editIconSrc);
 
@@ -280,7 +274,7 @@ export const EditSourceConnectionDialog: React.FC<EditSourceConnectionDialogProp
                                                                         : (
                                                                             sourceConnection?.short_name === 'feishu' &&
                                                                             field.name === 'folder_token'
-                                                                                ? extractFeishuFolderToken(e.target.value)
+                                                                                ? parseFeishuEntries(e.target.value).normalized
                                                                                 : e.target.value
                                                                         )
                                                                 }
