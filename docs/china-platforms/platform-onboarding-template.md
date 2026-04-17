@@ -35,8 +35,13 @@
 ### 3.1 配置字段（Auth + Source Config）
 
 - 必填凭证：
-- 必填定位参数（如 `folder_token` / `space_id`）：
+- 必填定位参数（如 `Feishu Links` / `space_id`）：
 - 可选参数（如 `max_folder_depth`）：
+- 输入交互建议（强烈推荐）：
+  - 优先让用户输入“业务链接”而不是底层 token
+  - 支持批量输入（空格/逗号/分号/换行）
+  - 前端实时显示：`X accepted, Y invalid`
+  - 提交前阻断 invalid 输入，避免创建后才失败
 
 ### 3.2 鉴权流程
 
@@ -44,11 +49,24 @@
 2. 调用资源 API 验证可访问性（validate）
 3. token 过期自动刷新/重取
 
-### 3.3 常见鉴权错误映射
+### 3.3 入口解析与抽象（建议标准化）
+
+- 抽象通用批量解析基类（如 `BatchEntryResolver`）：
+  - 负责拆分、去重、无效项收集
+  - 产出标准化入口列表
+- 平台侧仅实现 `resolve_one()`：
+  - 处理平台特有链接格式与对象类型映射
+  - 例如：Folder / Wiki / Docx 的差异收敛
+- 前端也采用插件式扩展：
+  - 通用配置页保持轻量
+  - 平台特化逻辑放在独立 extension 脚本
+
+### 3.4 常见鉴权错误映射
 
 - 401：凭证错误/过期
 - 403：权限未开通或资源未授权
 - 429：频控
+- 400：参数错误（常见于链接/token 解析后未标准化）
 
 ## 4) Airweave 代码接入清单（实施步骤）
 
@@ -71,7 +89,11 @@
 8. 前端图标与来源展示
    - `frontend/src/components/icons/apps/<platform>.svg`
 9. 前端配置表单校验（如有新增字段）
-   - `frontend/src/components/creation-views/SourceConfigView.tsx`
+   - `frontend/src/components/shared/views/panel/SourceConfigView.tsx`
+10. 前端平台特化扩展（推荐）
+   - `frontend/src/components/shared/views/panel/source-config-extensions/<platform>.ts`
+11. 后端入口解析器（推荐）
+   - `backend/airweave/platform/sources/resolvers/<platform>.py`
 
 ## 5) 联调验证流程（建议一次走通）
 
@@ -86,6 +108,7 @@
 - [ ] 触发 run sync 成功
 - [ ] 至少插入 1 条实体（`entities_inserted > 0`）
 - [ ] worker 日志无 `Source not found: <platform>`
+- [ ] UI 状态与 `sync_job` 最终状态一致（避免“看起来 pending，实际 failed”）
 
 ### 5.3 搜索阶段
 
@@ -100,6 +123,7 @@
 - [ ] backend/worker 已重启并加载新代码
 - [ ] 前端 `dist` 已更新，图标与表单已生效
 - [ ] 文档已补充“配置方式 + 常见问题”
+- [ ] 容器分工已确认（API 与真正执行同步的 worker 不是同一进程）
 
 ### 6.2 监控与日志
 
@@ -129,3 +153,5 @@
 - Source 未注册（worker 未加载新代码）
 - 搜索元数据未补全（description 缺失）
 - 前端变更未生效（构建产物/缓存/权限问题）
+- UI 卡 pending（前端展示未刷新 vs 后端任务已失败）
+- 参数错误 400（链接输入未标准化，传入错误 token 形态）
