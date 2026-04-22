@@ -42,6 +42,9 @@ export function getAppIconUrl(shortName: string, theme?: string): string {
     if (shortName === "slab" && theme !== "dark") {
       return new URL(`/src/components/icons/apps/slab-light.svg`, import.meta.url).href;
     }
+    if (shortName === "dingtalk") {
+      return new URL(`/src/components/icons/apps/dingtalk.webp`, import.meta.url).href;
+    }
     return new URL(`/src/components/icons/apps/${shortName}.svg`, import.meta.url).href;
   } catch {
     return new URL(`/src/components/icons/apps/default-icon.svg`, import.meta.url).href;
