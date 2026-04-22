@@ -108,7 +108,6 @@ const queueOrExecute = async (requestFn: () => Promise<Response>): Promise<Respo
 };
 
 export const API_CONFIG = {
-  baseURL: env.VITE_API_URL,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -116,6 +115,7 @@ export const API_CONFIG = {
 
 type ApiResponse<T = any> = Promise<Response>;
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+const NETWORK_RETRY_DELAYS_MS = [300, 800, 1500] as const;
 
 // Helper function to get PostHog session ID safely
 const getPostHogSessionId = (): string | undefined => {
@@ -127,6 +127,69 @@ const getPostHogSessionId = (): string | undefined => {
     console.debug('PostHog session ID error:', error);
   }
   return undefined;
+};
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const isAbortError = (error: unknown): boolean => {
+  if (error instanceof DOMException && error.name === 'AbortError') {
+    return true;
+  }
+  if (error instanceof Error && error.name === 'AbortError') {
+    return true;
+  }
+  return false;
+};
+
+const isRetryableNetworkError = (error: unknown): boolean => {
+  if (isAbortError(error)) {
+    return false;
+  }
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  const msg = error.message.toLowerCase();
+  return (
+    msg.includes('failed to fetch') ||
+    msg.includes('networkerror') ||
+    msg.includes('network error') ||
+    msg.includes('load failed') ||
+    msg.includes('connection refused')
+  );
+};
+
+const fetchWithNetworkRetry = async (
+  input: string,
+  init: RequestInit,
+  retryDelaysMs: readonly number[] = NETWORK_RETRY_DELAYS_MS
+): Promise<Response> => {
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt <= retryDelaysMs.length; attempt += 1) {
+    try {
+      return await fetch(input, init);
+    } catch (error) {
+      lastError = error;
+      if (!isRetryableNetworkError(error) || attempt === retryDelaysMs.length) {
+        throw error;
+      }
+      await sleep(retryDelaysMs[attempt]);
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('Unknown network error');
+};
+
+const resolveDynamicBaseUrl = (): string => {
+  const runtimeApiUrl = window.ENV?.API_URL;
+  if (runtimeApiUrl && runtimeApiUrl !== 'auto') {
+    return runtimeApiUrl;
+  }
+
+  // If runtime config is missing/auto, prefer current host with backend port.
+  if (typeof window !== 'undefined' && window.location?.hostname) {
+    return `${window.location.protocol}//${window.location.hostname}:8001`;
+  }
+
+  return env.VITE_API_URL || 'http://localhost:8001';
 };
 
 // Get headers with optional organization context
@@ -240,7 +303,7 @@ const makeRequest = async <T>(
   _isRetry: boolean = false
 ): ApiResponse<T> => {
   const requestFn = async () => {
-    const url = new URL(`${API_CONFIG.baseURL}${endpoint}`);
+    const url = new URL(`${resolveDynamicBaseUrl()}${endpoint}`);
     if (options?.params) {
       Object.entries(options.params).forEach(([key, value]) =>
         url.searchParams.append(key, String(value))
@@ -260,7 +323,7 @@ const makeRequest = async <T>(
       fetchOptions.body = JSON.stringify(options.data);
     }
 
-    let response = await fetch(url.toString(), fetchOptions);
+    let response = await fetchWithNetworkRetry(url.toString(), fetchOptions);
 
     // Handle 401/403 by attempting token refresh once
     if ((response.status === 401 || response.status === 403) && tokenProvider.clearToken) {
@@ -274,7 +337,7 @@ const makeRequest = async <T>(
         console.log('Retrying request with fresh token');
         // Retry with new token
         fetchOptions.headers = headers;
-        const retryResponse = await fetch(url.toString(), fetchOptions);
+        const retryResponse = await fetchWithNetworkRetry(url.toString(), fetchOptions);
 
         // If still 403 after retry, refresh org context so the UI
         // reflects revoked permissions (buttons disable, sections hide).
@@ -360,6 +423,30 @@ export const apiClient = {
     return tokenProvider.getToken();
   },
 
+  // Lightweight readiness probe used by first-page data loaders.
+  async waitUntilReady(options?: {
+    timeoutMs?: number;
+    intervalMs?: number;
+  }): Promise<boolean> {
+    const timeoutMs = options?.timeoutMs ?? 5000;
+    const intervalMs = options?.intervalMs ?? 300;
+    const started = Date.now();
+    const healthUrl = `${resolveDynamicBaseUrl()}/health/ready`;
+
+    while (Date.now() - started < timeoutMs) {
+      try {
+        const response = await fetch(healthUrl, { method: 'GET' });
+        if (response.ok) {
+          return true;
+        }
+      } catch (_error) {
+        // Ignore and retry until timeout.
+      }
+      await sleep(intervalMs);
+    }
+    return false;
+  },
+
   async get<T>(endpoint: string, params?: Record<string, any>): ApiResponse<T> {
     return makeRequest<T>('GET', endpoint, { params });
   },
@@ -400,7 +487,7 @@ export const apiClient = {
   ): Promise<void> {
     await waitForAuthReady();
 
-    const url = new URL(`${API_CONFIG.baseURL}${endpoint}`);
+    const url = new URL(`${resolveDynamicBaseUrl()}${endpoint}`);
     if (options?.params) {
       Object.entries(options.params).forEach(([k, v]) =>
         url.searchParams.append(k, String(v))

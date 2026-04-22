@@ -15,6 +15,7 @@ import { useCollectionCreationStore } from "@/stores/collectionCreationStore";
 import { useCollectionsStore, useSourcesStore } from "@/lib/stores";
 import { useUsageStore } from "@/lib/stores/usage";
 import { cn } from "@/lib/utils";
+import { apiClient } from "@/lib/api";
 import {
   Tooltip,
   TooltipContent,
@@ -86,26 +87,36 @@ const Dashboard = () => {
 
   // Initialize Zustand store subscribers
   useEffect(() => {
+    let cancelled = false;
+
     // Subscribe to collections events
     const unsubscribeCollections = useCollectionsStore.getState().subscribeToEvents();
 
     // Initial fetch - use console logging to track API calls
     console.log("🔄 [Dashboard] Initializing collections and sources");
 
-    // Load collections (will use cache if available)
-    fetchCollections().then(collections => {
-      console.log(`🔄 [Dashboard] Collections loaded: ${collections.length} collections available`);
-    });
+    const initializeDashboardData = async () => {
+      await apiClient.waitUntilReady({ timeoutMs: 5000, intervalMs: 300 });
+      if (cancelled) return;
 
-    // Load collections count
-    fetchCollectionsCount();
+      // Load collections (will use cache if available)
+      fetchCollections().then(collections => {
+        console.log(`🔄 [Dashboard] Collections loaded: ${collections.length} collections available`);
+      });
 
-    // Load sources - will use cached data if available
-    fetchSources().then(sources => {
-      console.log(`🔄 [Dashboard] Sources loaded: ${sources.length} sources available`);
-    });
+      // Load collections count
+      fetchCollectionsCount();
+
+      // Load sources - will use cached data if available
+      fetchSources().then(sources => {
+        console.log(`🔄 [Dashboard] Sources loaded: ${sources.length} sources available`);
+      });
+    };
+
+    initializeDashboardData();
 
     return () => {
+      cancelled = true;
       unsubscribeCollections();
     };
   }, [fetchCollections, fetchCollectionsCount, fetchSources]);
