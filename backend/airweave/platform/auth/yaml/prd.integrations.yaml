@@ -57,6 +57,19 @@ integrations:
       response_mode: "query"
       state: "YOUR_USER_BOUND_VALUE"
 
+  dingtalk:
+    oauth_type: "access_only"
+    url: "https://login.dingtalk.com/oauth2/auth"
+    backend_url: "https://api.dingtalk.com/v1.0/oauth2/userAccessToken"
+    grant_type: "authorization_code"
+    client_id: "dingtalk-prd-app-key"
+    client_secret: "dingtalk-prd-app-secret"
+    content_type: "application/json"
+    client_credential_location: "body"
+    scope: "openid"
+    additional_frontend_params:
+      prompt: "consent"
+
   dropbox:
     oauth_type: "with_refresh"
     url: "https://www.dropbox.com/oauth2/authorize"
@@ -70,17 +83,6 @@ integrations:
       token_access_type: "offline"
 
   github:
-
-  gitlab:
-    oauth_type: "with_refresh"
-    url: "https://gitlab.com/oauth/authorize"
-    backend_url: "https://gitlab.com/oauth/token"
-    grant_type: "authorization_code"
-    client_id: "624ae3aab6bfaded8f98c0335a6f4f2703c347788ca9b857e1dbde344feaec02"
-    client_secret: "gitlab-client-secret-key"
-    content_type: "application/x-www-form-urlencoded"
-    client_credential_location: "body"
-    scope: "read_api read_user read_repository openid profile email"
 
   gmail:
     oauth_type: "with_refresh"

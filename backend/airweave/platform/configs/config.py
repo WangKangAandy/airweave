@@ -4,7 +4,7 @@ import re
 from typing import Literal, Optional
 from urllib.parse import urlparse
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 
 from airweave.core.config import settings
 from airweave.platform.configs._base import BaseConfig, RequiredTemplateConfig
@@ -233,6 +233,140 @@ class FeishuConfig(SourceConfig):
         return ",".join(dict.fromkeys(normalized))
 
 
+class DingtalkConfig(SourceConfig):
+    """Dingtalk configuration schema.
+
+    MVP constraints:
+    - operator_mode only supports fixed_admin
+    - operator_union_id is required
+    - exactly one primary entry mode is used:
+      links > root_space_id/root_folder_id
+    """
+
+    links: str = Field(
+        ...,
+        title="Dingtalk Links",
+        description=(
+            "Paste one or more Dingtalk links/tokens. "
+            "Separate items with spaces, commas, semicolons, or new lines."
+        ),
+        min_length=5,
+    )
+    root_space_id: str = Field(
+        default="",
+        title="Root Space ID",
+        description="Root Dingtalk space ID used when links are not provided.",
+        json_schema_extra={"exclude_from_ui": True},
+    )
+    root_folder_id: str = Field(
+        default="",
+        title="Root Folder ID",
+        description="Root Dingtalk folder ID used when links are not provided.",
+        json_schema_extra={"exclude_from_ui": True},
+    )
+    operator_mode: Literal["fixed_admin"] = Field(
+        default="fixed_admin",
+        title="Operator Mode",
+        description="Fixed to fixed_admin in current Dingtalk implementation.",
+        json_schema_extra={"exclude_from_ui": True},
+    )
+    operator_union_id: str = Field(
+        default="",
+        title="Operator Union ID",
+        description=(
+            "Union ID for DingTalk API operator context. "
+            "Filled automatically after Connect (OAuth); required before sync can read HTTP doc links."
+        ),
+    )
+    discovery_mode: Literal["space_full", "folder_scoped"] = Field(
+        default="space_full",
+        title="Discovery Mode",
+        description="Discovery mode for Dingtalk document traversal.",
+        json_schema_extra={"exclude_from_ui": True},
+    )
+    max_folder_depth: int = Field(
+        default=5,
+        title="Max Folder Depth",
+        description="Maximum nested folder depth for folder_scoped traversal.",
+        ge=1,
+        le=20,
+        json_schema_extra={"exclude_from_ui": True},
+    )
+    include_content_types: list[str] = Field(
+        default=["doc"],
+        title="Included Content Types",
+        description="Content types to include. MVP defaults to docs only.",
+        json_schema_extra={"exclude_from_ui": True},
+    )
+    permission_mode: str = Field(
+        default="app_operator_scope",
+        title="Permission Mode",
+        description="Index boundary marker used for downstream metadata.",
+        json_schema_extra={"exclude_from_ui": True},
+    )
+
+    @field_validator("links", mode="before")
+    @classmethod
+    def normalize_links(cls, value: str) -> str:
+        """Normalize links into canonical comma-separated representation."""
+        if value is None:
+            return ""
+        raw = str(value).strip()
+        if not raw:
+            return ""
+        parts = [part.strip() for part in re.split(r"[\s,;，；]+", raw) if part.strip()]
+        return ",".join(dict.fromkeys(parts))
+
+    @field_validator("operator_union_id")
+    @classmethod
+    def validate_operator_union_id(cls, value: str) -> str:
+        """Normalize operator_union_id (set after OAuth before sync)."""
+        if value is None:
+            return ""
+        return str(value).strip()
+
+    @field_validator("root_space_id", "root_folder_id")
+    @classmethod
+    def normalize_root_ids(cls, value: str) -> str:
+        """Trim whitespace for root identifiers."""
+        return value.strip() if isinstance(value, str) else value
+
+    @field_validator("include_content_types", mode="before")
+    @classmethod
+    def parse_content_types(cls, value):
+        """Allow comma-separated content types from text input."""
+        if isinstance(value, str):
+            if not value.strip():
+                return ["doc"]
+            return [item.strip() for item in value.split(",") if item.strip()]
+        return value
+
+    @model_validator(mode="after")
+    def validate_primary_entry_constraints(self):
+        """Enforce links-first flow, keeping root IDs as hidden backward-compat fallback."""
+        has_links = bool(self.links)
+        has_space = bool(self.root_space_id)
+        has_folder = bool(self.root_folder_id)
+
+        if has_links:
+            return self
+
+        if has_space and has_folder:
+            raise ValueError(
+                "root_space_id and root_folder_id cannot both be primary entries. "
+                "Choose exactly one when links are not provided."
+            )
+
+        if not has_space and not has_folder:
+            raise ValueError("Provide Dingtalk links.")
+
+        return self
+
+
+# Backward-compatible alias for existing imports.
+DingTalkDocsConfig = DingtalkConfig
+
+
 class Document360Config(SourceConfig):
     """Document360 configuration schema."""
 
@@ -392,11 +526,12 @@ class GitHubConfig(SourceConfig):
 class GitLabConfig(SourceConfig):
     """GitLab configuration schema."""
 
-    project_id: str = Field(
-        default="",
-        title="Project ID",
+    repo_url: str = Field(
+        ...,
+        title="Repository URL",
         description=(
-            "Specific project ID to sync (e.g., '12345'). If empty, syncs all accessible projects."
+            "GitLab repository URL. Supports self-hosted URLs, e.g. "
+            "'https://xxxxxx/ai/pytorch-lightning.git'."
         ),
     )
     branch: str = Field(
@@ -406,6 +541,20 @@ class GitLabConfig(SourceConfig):
             "Specific branch to sync (e.g., 'main', 'master'). If empty, uses the default branch."
         ),
     )
+
+    @field_validator("repo_url")
+    @classmethod
+    def validate_repo_url(cls, v: str) -> str:
+        """Validate repository URL when provided."""
+        if not v:
+            raise ValueError("Repository URL is required")
+        value = v.strip()
+        parsed = urlparse(value)
+        if not parsed.scheme or not parsed.netloc:
+            raise ValueError("Repository URL must be a valid absolute URL")
+        if parsed.scheme not in {"http", "https"}:
+            raise ValueError("Repository URL must use http:// or https://")
+        return value
 
 
 class GmailConfig(SourceConfig):

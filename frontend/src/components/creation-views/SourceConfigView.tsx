@@ -143,6 +143,13 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
   }, [sourceName, sourceConnectionName, connectionName, setSourceConnectionName]);
 
   const [connectionUrl, setConnectionUrl] = useState('');
+  const visibleConfigFields = sourceDetails?.config_fields?.fields?.filter((field) => {
+    // Hide legacy Project ID field for GitLab; repository URL is the primary path.
+    if (selectedSource === 'gitlab' && field.name === 'project_id') {
+      return false;
+    }
+    return true;
+  }) || [];
 
   // Check if source uses OAuth1 (vs OAuth2)
   const isOAuth1 = () => {
@@ -290,6 +297,13 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
       setAuthMode('external_provider');
     }
   }, [sourceDetails, authProviderConnections, authMode, setAuthMode]);
+
+  // GitLab is now direct-only to avoid legacy OAuth path interference.
+  useEffect(() => {
+    if (selectedSource === 'gitlab' && authMode !== 'direct_auth') {
+      setAuthMode('direct_auth');
+    }
+  }, [selectedSource, authMode, setAuthMode]);
 
   // Helper function to get required config fields for a provider
   const getRequiredProviderConfigFields = (providerShortName: string) => {
@@ -440,11 +454,13 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
         };
       }
 
+      const targetCollectionReadableId = isAddingToExisting ? existingCollectionId : collectionId;
+
       const payload: any = {
         name: effectiveName,
         description: `${sourceName} connection for ${collectionName}`,
         short_name: selectedSource,
-        readable_collection_id: isAddingToExisting ? existingCollectionId : collectionId,
+        readable_collection_id: targetCollectionReadableId,
         // Only include authentication field if not null
         ...(authentication !== null && { authentication }),
         // For direct auth, sync immediately since we have credentials
@@ -454,6 +470,14 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
         // For sources with no auth methods, sync immediately
         sync_immediately: (authMode === 'direct_auth' || authMode === 'external_provider' || !authMode) && !supportsBrowseTree,
       };
+
+      // Post-OAuth redirect must use the browser's origin (e.g. LAN http://192.168.x.x:8080),
+      // not settings.app_url from the server (defaults to http://localhost:8080) — otherwise
+      // the user lands on the wrong host without ?status=success&source_connection_id= and
+      // verify-oauth / success handling never runs.
+      if (authMode === 'oauth2' && targetCollectionReadableId && typeof window !== 'undefined') {
+        payload.redirect_url = `${window.location.origin}/collections/${targetCollectionReadableId}`;
+      }
 
       // Add config fields if any - filter out empty values
       if (Object.keys(configData).length > 0) {
@@ -703,15 +727,15 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
                   )}
 
                   {/* Config fields (additional configuration) */}
-                  {sourceDetails?.config_fields?.fields && sourceDetails.config_fields.fields.length > 0 && (
+                  {visibleConfigFields.length > 0 && (
                     <div className="space-y-3">
                       <label className="block text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                         {(() => {
-                          const hasRequiredFields = sourceDetails.config_fields.fields.some((field: any) => field.required);
+                          const hasRequiredFields = visibleConfigFields.some((field: any) => field.required);
                           return hasRequiredFields ? "Additional Configuration" : "Additional Configuration (optional)";
                         })()}
                       </label>
-                      {sourceDetails.config_fields.fields.map((field) => (
+                      {visibleConfigFields.map((field) => (
                         field.type === 'boolean' ? (
                           <label key={field.name} className="flex items-center justify-between gap-4 cursor-pointer group">
                             <div className="min-w-0">

@@ -553,10 +553,26 @@ class GoogleSlidesAuthConfig(OAuth2BYOCAuthConfig):
     # Inherits client_id, client_secret, refresh_token and access_token from OAuth2BYOCAuthConfig
 
 
-class GitLabAuthConfig(OAuth2WithRefreshAuthConfig):
-    """GitLab authentication credentials schema."""
+class GitLabPatAuthConfig(AuthConfig):
+    """GitLab PAT authentication credentials schema."""
 
-    # Inherits refresh_token and access_token from OAuth2WithRefreshAuthConfig
+    personal_access_token: str = Field(
+        title="Personal Access Token",
+        description="GitLab PAT (for example glpat-...) with read_api/read_repository scopes",
+        min_length=8,
+    )
+
+    @field_validator("personal_access_token")
+    @classmethod
+    def validate_personal_access_token(cls, v: str) -> str:
+        """Validate GitLab personal access token format."""
+        if not v or not v.strip():
+            raise ValueError("Personal access token is required")
+        token = v.strip()
+        # Modern GitLab PAT format starts with glpat-. Keep fallback leniency for older tokens.
+        if token.startswith("glpat-") or len(token) >= 20:
+            return token
+        raise ValueError("Invalid GitLab token format. Expected glpat-... or a valid PAT token")
 
 
 class HubspotAuthConfig(OAuth2WithRefreshAuthConfig):
@@ -933,6 +949,14 @@ class FeishuAuthConfig(AuthConfig):
         description="Feishu app_secret from your Feishu Open Platform app.",
         min_length=10,
     )
+
+
+class DingtalkAuthConfig(OAuth2AuthConfig):
+    """DingTalk authentication: user access token from browser OAuth2 (userAccessToken)."""
+
+
+# Backward-compatible alias for existing imports.
+DingTalkAuthConfig = DingtalkAuthConfig
 
 
 class TodoistAuthConfig(OAuth2AuthConfig):

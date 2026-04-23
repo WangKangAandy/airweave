@@ -6,6 +6,7 @@ import base64
 import mimetypes
 from pathlib import Path
 from typing import Any, AsyncGenerator, Dict, List, Optional
+from urllib.parse import quote, urlparse
 
 from tenacity import retry, stop_after_attempt
 
@@ -13,11 +14,11 @@ from airweave.core.logging import ContextualLogger
 from airweave.core.shared_models import RateLimitLevel
 from airweave.domains.browse_tree.types import NodeSelectionData
 from airweave.domains.sources.exceptions import SourceAuthError
-from airweave.domains.sources.token_providers.protocol import TokenProviderProtocol
+from airweave.domains.sources.token_providers.protocol import AuthProviderKind, TokenProviderProtocol
 from airweave.domains.storage import FileSkippedException
 from airweave.domains.storage.file_service import FileService
 from airweave.domains.syncs.cursors.cursor import SyncCursor
-from airweave.platform.configs.auth import GitLabAuthConfig
+from airweave.platform.configs.auth import GitLabPatAuthConfig
 from airweave.platform.configs.config import GitLabConfig
 from airweave.platform.decorators import source
 from airweave.platform.entities._base import BaseEntity, Breadcrumb
@@ -41,19 +42,15 @@ from airweave.platform.utils.file_extensions import (
     get_language_for_extension,
     is_text_file,
 )
-from airweave.schemas.source_connection import AuthenticationMethod, OAuthType
+from airweave.schemas.source_connection import AuthenticationMethod
 
 
 @source(
     name="GitLab",
     short_name="gitlab",
-    auth_methods=[
-        AuthenticationMethod.OAUTH_BROWSER,
-        AuthenticationMethod.OAUTH_TOKEN,
-        AuthenticationMethod.AUTH_PROVIDER,
-    ],
-    oauth_type=OAuthType.WITH_REFRESH,
-    auth_config_class=GitLabAuthConfig,
+    auth_methods=[AuthenticationMethod.DIRECT],
+    oauth_type=None,
+    auth_config_class=GitLabPatAuthConfig,
     config_class=GitLabConfig,
     labels=["Code"],
     supports_continuous=False,
@@ -82,9 +79,38 @@ class GitLabSource(BaseSource):
     ) -> GitLabSource:
         """Create a new source instance with authentication."""
         instance = cls(auth=auth, logger=logger, http_client=http_client)
-        instance.project_id = config.project_id or None
+        instance.base_url = cls._resolve_api_base_url(config.repo_url)
+        instance.project_ref = cls._resolve_project_ref(config.repo_url)
         instance.branch = config.branch or ""
         return instance
+
+    @staticmethod
+    def _resolve_api_base_url(repo_url: str) -> str:
+        """Resolve API base URL from repository URL, with gitlab.com fallback."""
+        url = (repo_url or "").strip()
+        if not url:
+            return GitLabSource.BASE_URL
+        parsed = urlparse(url)
+        if not parsed.scheme or not parsed.netloc:
+            return GitLabSource.BASE_URL
+        return f"{parsed.scheme}://{parsed.netloc}/api/v4"
+
+    @staticmethod
+    def _resolve_project_ref(repo_url: str) -> Optional[str]:
+        """Resolve GitLab project reference from repository URL.
+
+        Returns:
+            - URL-encoded path (group%2Frepo) when repo URL is provided.
+        """
+        raw_url = (repo_url or "").strip()
+        if raw_url:
+            parsed = urlparse(raw_url)
+            path = (parsed.path or "").strip("/")
+            if path.endswith(".git"):
+                path = path[:-4]
+            if path:
+                return quote(path, safe="")
+        return None
 
     # ------------------------------------------------------------------
     # HTTP helpers
@@ -92,7 +118,10 @@ class GitLabSource(BaseSource):
 
     async def _authed_headers(self) -> Dict[str, str]:
         """Build Authorization + Accept headers with a fresh token."""
-        token = await self.auth.get_token()
+        if self.auth.provider_kind == AuthProviderKind.CREDENTIAL:
+            token = self.auth.credentials.personal_access_token
+        else:
+            token = await self.auth.get_token()
         return {
             "Authorization": f"Bearer {token}",
             "Accept": "application/json",
@@ -178,7 +207,7 @@ class GitLabSource(BaseSource):
 
     async def _get_current_user(self) -> GitLabUserEntity:
         """Get current authenticated user information."""
-        url = f"{self.BASE_URL}/user"
+        url = f"{self.base_url}/user"
         user_data = await self._get(url)
 
         return GitLabUserEntity(
@@ -200,7 +229,7 @@ class GitLabSource(BaseSource):
 
     async def _get_project_info(self, project_id: str) -> GitLabProjectEntity:
         """Get project information."""
-        url = f"{self.BASE_URL}/projects/{project_id}"
+        url = f"{self.base_url}/projects/{project_id}"
         project_data = await self._get(url)
         return GitLabProjectEntity.from_api(project_data)
 
@@ -208,7 +237,7 @@ class GitLabSource(BaseSource):
         self, project_id: str, project_breadcrumbs: List[Breadcrumb]
     ) -> AsyncGenerator[BaseEntity, None]:
         """Get issues for a project."""
-        url = f"{self.BASE_URL}/projects/{project_id}/issues"
+        url = f"{self.base_url}/projects/{project_id}/issues"
         issues = await self._get_paginated_results(url)
 
         for issue in issues:
@@ -220,7 +249,7 @@ class GitLabSource(BaseSource):
         self, project_id: str, project_breadcrumbs: List[Breadcrumb]
     ) -> AsyncGenerator[BaseEntity, None]:
         """Get merge requests for a project."""
-        url = f"{self.BASE_URL}/projects/{project_id}/merge_requests"
+        url = f"{self.base_url}/projects/{project_id}/merge_requests"
         merge_requests = await self._get_paginated_results(url)
 
         for mr in merge_requests:
@@ -260,7 +289,7 @@ class GitLabSource(BaseSource):
 
         processed_paths.add(path)
 
-        url = f"{self.BASE_URL}/projects/{project_id}/repository/tree"
+        url = f"{self.base_url}/projects/{project_id}/repository/tree"
         params = {"ref": branch, "path": path, "per_page": 100}
 
         try:
@@ -326,7 +355,7 @@ class GitLabSource(BaseSource):
         """Process a file item and create file entities."""
         try:
             encoded_path = file_path.replace("/", "%2F")
-            url = f"{self.BASE_URL}/projects/{project_id}/repository/files/{encoded_path}"
+            url = f"{self.base_url}/projects/{project_id}/repository/files/{encoded_path}"
             params = {"ref": branch}
 
             file_data = await self._get(url, params)
@@ -403,10 +432,10 @@ class GitLabSource(BaseSource):
 
     async def _get_projects(self) -> List[GitLabProjectEntity]:
         """Get accessible projects based on configuration."""
-        if hasattr(self, "project_id") and self.project_id:
-            return [await self._get_project_info(self.project_id)]
+        if hasattr(self, "project_ref") and self.project_ref:
+            return [await self._get_project_info(self.project_ref)]
 
-        url = f"{self.BASE_URL}/projects"
+        url = f"{self.base_url}/projects"
         params = {"membership": True, "simple": False}
         projects_data = await self._get_paginated_results(url, params)
         projects = []
@@ -498,4 +527,6 @@ class GitLabSource(BaseSource):
 
     async def validate(self) -> None:
         """Validate credentials by pinging GitLab's /user endpoint."""
-        await self._get(f"{self.BASE_URL}/user")
+        await self._get(f"{self.base_url}/user")
+        if hasattr(self, "project_ref") and self.project_ref:
+            await self._get(f"{self.base_url}/projects/{self.project_ref}")
