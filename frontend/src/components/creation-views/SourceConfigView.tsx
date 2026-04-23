@@ -713,7 +713,7 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
                             placeholder=""
                             value={authFields[field.name] || ''}
                             onChange={(value) => setAuthFields({ ...authFields, [field.name]: value })}
-                            validation={getAuthFieldValidation(field.name, sourceDetails?.short_name)}
+                            validation={getAuthFieldValidation(field.name, sourceDetails?.short_name ?? selectedSource)}
                             className={cn(
                               "focus:border-gray-400 dark:focus:border-gray-600",
                               isDark

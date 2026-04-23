@@ -684,6 +684,36 @@ export const githubTokenValidation: FieldValidation<string> = {
 };
 
 /**
+ * GitLab Personal Access Token validation
+ */
+export const gitlabTokenValidation: FieldValidation<string> = {
+  field: 'personal_access_token',
+  debounceMs: 0,
+  showOn: 'blur',
+  validate: (value: string): ValidationResult => {
+    const trimmed = value.trim();
+
+    if (!trimmed) {
+      return { isValid: true, severity: 'info' };
+    }
+
+    // GitLab PAT usually starts with glpat-. Keep lenient fallback for older PAT formats.
+    const isModernPat = trimmed.startsWith('glpat-');
+    const isLegacyLikePat = trimmed.length >= 20;
+
+    if (!isModernPat && !isLegacyLikePat) {
+      return {
+        isValid: false,
+        hint: 'GitLab token should start with "glpat-"',
+        severity: 'warning'
+      };
+    }
+
+    return { isValid: true, severity: 'info' };
+  }
+};
+
+/**
  * Stripe API key validation
  */
 export const stripeApiKeyValidation: FieldValidation<string> = {
@@ -727,6 +757,12 @@ export function getAuthFieldValidation(fieldType: string, sourceShortName?: stri
   if (fieldType === 'api_key' && sourceShortName === 'stripe') {
     return stripeApiKeyValidation;
   }
+  if (fieldType === 'personal_access_token' && sourceShortName === 'gitlab') {
+    return gitlabTokenValidation;
+  }
+  if (fieldType === 'personal_access_token' && sourceShortName === 'github') {
+    return githubTokenValidation;
+  }
 
   switch (fieldType) {
     // API keys and tokens
@@ -736,7 +772,8 @@ export function getAuthFieldValidation(fieldType: string, sourceShortName?: stri
     case 'access_token':
       return apiKeyValidation;
     case 'personal_access_token':
-      return githubTokenValidation;
+      // Don't assume GitHub when source is unknown.
+      return apiKeyValidation;
 
     // URLs
     case 'url':
