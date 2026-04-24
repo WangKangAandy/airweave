@@ -43,13 +43,27 @@ class DingTalkEntryResolver(BatchEntryResolver[ResolvedDingTalkEntry]):
                 ResolvedDingTalkEntry(entry_type="space", token=token, source=entry) if token else None
             )
 
-        # URL-style parsing (best-effort patterns for DingTalk docs links)
+        # URL-style parsing (best-effort patterns for DingTalk docs/knowledge-base links)
         node_match = re.search(r"/nodes/([A-Za-z0-9_-]+)", entry)
         if node_match:
             return ResolvedDingTalkEntry(entry_type="doc", token=node_match.group(1), source=entry)
         doc_match = re.search(r"(?:doc|docs)/([A-Za-z0-9_-]+)", entry)
         if doc_match:
             return ResolvedDingTalkEntry(entry_type="doc", token=doc_match.group(1), source=entry)
+        space_path_match = re.search(r"/(?:space|spaces|workspace|workspaces)/([A-Za-z0-9_-]+)", entry)
+        if space_path_match:
+            return ResolvedDingTalkEntry(
+                entry_type="space",
+                token=space_path_match.group(1),
+                source=entry,
+            )
+        space_query_match = re.search(r"(?:[?&](?:spaceId|workspaceId)=)([A-Za-z0-9_-]+)", entry)
+        if space_query_match:
+            return ResolvedDingTalkEntry(
+                entry_type="space",
+                token=space_query_match.group(1),
+                source=entry,
+            )
         folder_match = re.search(r"folder(?:/|=)([A-Za-z0-9_-]+)", entry)
         if folder_match:
             return ResolvedDingTalkEntry(

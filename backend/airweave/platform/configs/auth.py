@@ -951,8 +951,19 @@ class FeishuAuthConfig(AuthConfig):
     )
 
 
-class DingtalkAuthConfig(OAuth2AuthConfig):
-    """DingTalk authentication: user access token from browser OAuth2 (userAccessToken)."""
+class DingtalkAuthConfig(AuthConfig):
+    """DingTalk authentication credentials schema (internal app key/secret)."""
+
+    app_key: str = Field(
+        title="App Key",
+        description="DingTalk internal app AppKey.",
+        min_length=5,
+    )
+    app_secret: str = Field(
+        title="App Secret",
+        description="DingTalk internal app AppSecret.",
+        min_length=10,
+    )
 
 
 # Backward-compatible alias for existing imports.

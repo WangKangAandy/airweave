@@ -561,7 +561,6 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
     }
   };
 
-
   return (
     <div className="h-full flex flex-col">
       <div className="px-8 py-8 flex-1 overflow-auto">

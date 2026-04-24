@@ -14,7 +14,10 @@ from airweave.domains.sources.exceptions import (
     SourceEntityNotFoundError,
     SourceError,
 )
-from airweave.domains.sources.token_providers.protocol import TokenProviderProtocol
+from airweave.domains.sources.token_providers.protocol import (
+    AuthProviderKind,
+    TokenProviderProtocol,
+)
 from airweave.domains.storage.file_service import FileService
 from airweave.domains.syncs.cursors.cursor import SyncCursor
 from airweave.platform.configs.auth import DingtalkAuthConfig
@@ -41,7 +44,7 @@ DINGTALK_API_BASE = "https://api.dingtalk.com"
 @source(
     name="Dingtalk",
     short_name="dingtalk",
-    auth_methods=[AuthenticationMethod.OAUTH_BROWSER],
+    auth_methods=[AuthenticationMethod.DIRECT],
     oauth_type=OAuthType.ACCESS_ONLY,
     auth_config_class=DingtalkAuthConfig,
     config_class=DingtalkConfig,
@@ -56,6 +59,7 @@ class DingtalkSource(BaseSource):
         "token": "/v1.0/oauth2/accessToken",
         "space_files": "/v1.0/drive/spaces/{space_id}/files",
         "folder_files": "/v1.0/drive/folders/{folder_id}/files",
+        "space_directories": "/v2.0/doc/spaces/{space_id}/directories",
         "doc_blocks": "/v1.0/docs/{doc_id}/blocks",
         "doc_content": "/v1.0/docs/{doc_id}/content",
         "doc_meta": "/v1.0/docs/{doc_id}",
@@ -80,8 +84,35 @@ class DingtalkSource(BaseSource):
         return instance
 
     async def _get_access_token(self) -> str:
-        """Return a user access token for DingTalk OpenAPI (browser OAuth)."""
-        return await self.auth.get_token()
+        """Return an access token for DingTalk OpenAPI.
+
+        For direct auth, exchange app_key/app_secret per request.
+        For non-credential providers, fallback to token provider token.
+        """
+        if self.auth.provider_kind != AuthProviderKind.CREDENTIAL:
+            return await self.auth.get_token()
+
+        credentials = self.auth.credentials
+        payload = {
+            "appKey": credentials.app_key,
+            "appSecret": credentials.app_secret,
+        }
+        response = await self.http_client.post(
+            f"{DINGTALK_API_BASE}{self.API_PATHS['token']}",
+            json=payload,
+            headers={"Content-Type": "application/json"},
+            timeout=30.0,
+        )
+        raise_for_status(
+            response,
+            source_short_name=self.short_name,
+            token_provider_kind=self.auth.provider_kind,
+        )
+        data = response.json()
+        access_token = data.get("accessToken")
+        if not access_token:
+            raise ValueError("DingTalk accessToken missing in auth response")
+        return str(access_token)
 
     @retry(
         stop=stop_after_attempt(5),
@@ -206,12 +237,35 @@ class DingtalkSource(BaseSource):
                 "operator_union_id is required for DingTalk doc links. "
                 "Run OAuth probe to auto-fill this value."
             )
-        await self._post(
+        data = await self._post(
             self.API_PATHS["wiki_query_by_url"],
             access_token=access_token,
             params=wiki_params,
             payload={"url": self._normalize_entry_url(entry.source)},
         )
+        node = data.get("node") if isinstance(data, dict) else None
+        if not isinstance(node, dict):
+            return
+        node_type = str(node.get("type") or "").upper()
+        if node_type != "FOLDER" and not bool(node.get("hasChildren")):
+            return
+        space_id = str(node.get("workspaceId") or "")
+        node_id = str(node.get("nodeId") or "")
+        if not space_id or not node_id:
+            return
+        parent_dentry_id = await self._resolve_folder_parent_dentry_id(
+            space_id=space_id,
+            node_id=node_id,
+            access_token=access_token,
+        )
+        # Folder link scope must also verify directory-list permission.
+        async for _ in self._list_space_directory_items(
+            space_id=space_id,
+            access_token=access_token,
+            parent_dentry_id=parent_dentry_id,
+            page_size=1,
+        ):
+            break
 
     async def _query_node_by_url(
         self, *, source_url: str, access_token: str
@@ -246,6 +300,43 @@ class DingtalkSource(BaseSource):
         if not (space_id and dentry_id):
             return None
         return space_id, dentry_id
+
+    async def _resolve_folder_parent_dentry_id(
+        self,
+        *,
+        space_id: str,
+        node_id: str,
+        access_token: str,
+    ) -> str:
+        """Resolve folder parent dentry id used by directory listing.
+
+        queryByUrl returns nodeId (uuid-like), while directory listing can require
+        numeric/alternate dentryId in some workspaces. Prefer queryDentryId first,
+        then fallback to nodeId when resolution is unavailable.
+        """
+        resolved = await self._resolve_dentry_id(dentry_uuid=node_id, access_token=access_token)
+        if resolved:
+            resolved_space_id, resolved_dentry_id = resolved
+            if resolved_space_id == space_id and resolved_dentry_id:
+                return resolved_dentry_id
+
+        try:
+            async for item in self._list_space_directory_items(
+                space_id=space_id,
+                access_token=access_token,
+                parent_dentry_id=None,
+                page_size=200,
+            ):
+                item_uuid = str(item.get("dentryUuid") or "")
+                if item_uuid == node_id:
+                    mapped = str(item.get("dentryId") or "")
+                    if mapped:
+                        return mapped
+        except Exception:
+            # Fallback to nodeId for compatibility with workspaces where it works.
+            pass
+
+        return node_id
 
     def _operator_union_id(self) -> str:
         """Return normalized operator union id."""
@@ -406,7 +497,49 @@ class DingtalkSource(BaseSource):
 
     def _extract_doc_id(self, item: dict) -> str:
         """Extract a document identifier from a discovered item."""
-        for key in ("doc_id", "docId", "dentry_uuid", "dentryUuid", "id", "token"):
+        for key in (
+            "doc_id",
+            "docId",
+            "docKey",
+            "doc_key",
+            "dentryId",
+            "dentry_id",
+            "dentry_uuid",
+            "dentryUuid",
+            "id",
+            "token",
+        ):
+            value = item.get(key)
+            if value:
+                return str(value)
+        return ""
+
+    def _candidate_doc_ids(self, item: dict) -> list[str]:
+        """Return ordered candidate identifiers for docs content APIs."""
+        candidates: list[str] = []
+        for key in (
+            "doc_id",
+            "docId",
+            "docKey",
+            "doc_key",
+            "dentryId",
+            "dentry_id",
+            "dentry_uuid",
+            "dentryUuid",
+            "id",
+            "token",
+        ):
+            value = item.get(key)
+            if not value:
+                continue
+            text = str(value)
+            if text not in candidates:
+                candidates.append(text)
+        return candidates
+
+    def _extract_space_id(self, item: dict) -> str:
+        """Extract a space/workspace identifier from item payload."""
+        for key in ("space_id", "spaceId", "workspaceId", "workspace_id"):
             value = item.get(key)
             if value:
                 return str(value)
@@ -416,6 +549,8 @@ class DingtalkSource(BaseSource):
         """Extract normalized item type."""
         raw = (
             item.get("type")
+            or item.get("dentryType")
+            or item.get("contentType")
             or item.get("item_type")
             or item.get("resource_type")
             or item.get("kind")
@@ -428,12 +563,108 @@ class DingtalkSource(BaseSource):
         item_type = self._extract_item_type(item)
         if not item_type:
             return True
-        return any(token in item_type for token in ("doc", "sheet", "wiki"))
+        return any(
+            token in item_type
+            for token in ("doc", "sheet", "wiki", "file", "alidoc", "document")
+        )
 
     def _is_folder_type(self, item: dict) -> bool:
         """Check whether an item should be treated as folder-like."""
         item_type = self._extract_item_type(item)
         return any(token in item_type for token in ("folder", "space", "directory"))
+
+    def _extract_directory_children(self, data: dict) -> list[dict]:
+        """Extract children array from directory endpoint payload."""
+        if not isinstance(data, dict):
+            return []
+        children = (
+            data.get("children")
+            or (data.get("data") or {}).get("children")
+            or (data.get("result") or {}).get("children")
+            or []
+        )
+        if not isinstance(children, list):
+            return []
+        return [item for item in children if isinstance(item, dict)]
+
+    async def _list_space_directory_items(
+        self,
+        *,
+        space_id: str,
+        access_token: str,
+        parent_dentry_id: str | None = None,
+        page_size: int = 200,
+    ) -> AsyncGenerator[dict, None]:
+        """List directory children for a space using knowledge-base APIs."""
+        next_token: str | None = None
+        while True:
+            params: dict[str, Any] = {
+                "maxResults": page_size,
+                **self._wiki_operator_params(),
+            }
+            if parent_dentry_id:
+                params["dentryId"] = parent_dentry_id
+            if next_token:
+                params["nextToken"] = next_token
+
+            data = await self._get(
+                self.API_PATHS["space_directories"].format(space_id=space_id),
+                access_token=access_token,
+                params=params,
+            )
+            children = self._extract_directory_children(data)
+            for child in children:
+                yield child
+
+            has_more = (
+                data.get("hasMore")
+                if isinstance(data, dict)
+                else False
+            )
+            next_token = (
+                data.get("nextToken")
+                or (data.get("data") or {}).get("nextToken")
+                or (data.get("result") or {}).get("nextToken")
+            )
+            if not has_more or not next_token:
+                break
+            next_token = str(next_token)
+
+    async def _walk_space_docs_via_directories(
+        self,
+        *,
+        space_id: str,
+        access_token: str,
+        parent_dentry_id: str | None = None,
+        depth: int = 0,
+        seen_folders: set[str] | None = None,
+    ) -> AsyncGenerator[dict, None]:
+        """Recursively traverse knowledge-base directory tree for docs."""
+        folders = seen_folders if seen_folders is not None else set()
+        async for item in self._list_space_directory_items(
+            space_id=space_id,
+            access_token=access_token,
+            parent_dentry_id=parent_dentry_id,
+        ):
+            if self._is_doc_type(item):
+                yield item
+                continue
+            if not self._is_folder_type(item):
+                continue
+            if depth >= self.config.max_folder_depth:
+                continue
+            folder_id = self._extract_doc_id(item)
+            if not folder_id or folder_id in folders:
+                continue
+            folders.add(folder_id)
+            async for child in self._walk_space_docs_via_directories(
+                space_id=space_id,
+                access_token=access_token,
+                parent_dentry_id=folder_id,
+                depth=depth + 1,
+                seen_folders=folders,
+            ):
+                yield child
 
     async def _list_space_items(
         self,
@@ -539,6 +770,47 @@ class DingtalkSource(BaseSource):
         seen_docs: set[str] = set()
         for entry in entries:
             if entry.entry_type == "doc":
+                if self._is_http_entry_source(entry.source):
+                    node = await self._query_node_by_url(
+                        source_url=entry.source,
+                        access_token=access_token,
+                    )
+                    if isinstance(node, dict):
+                        node_id = str(node.get("nodeId") or entry.token)
+                        node_type = str(node.get("type") or "").upper()
+                        if node_type == "FOLDER" or bool(node.get("hasChildren")):
+                            space_id = str(node.get("workspaceId") or "")
+                            if space_id and node_id:
+                                parent_dentry_id = await self._resolve_folder_parent_dentry_id(
+                                    space_id=space_id,
+                                    node_id=node_id,
+                                    access_token=access_token,
+                                )
+                                async for item in self._walk_space_docs_via_directories(
+                                    space_id=space_id,
+                                    access_token=access_token,
+                                    parent_dentry_id=parent_dentry_id,
+                                    depth=0,
+                                    seen_folders={parent_dentry_id},
+                                ):
+                                    doc_id = self._extract_doc_id(item)
+                                    if doc_id and doc_id not in seen_docs:
+                                        seen_docs.add(doc_id)
+                                        yield item
+                                continue
+                        doc = {
+                            "id": node_id,
+                            "title": str(node.get("name") or ""),
+                            "url": str(node.get("url") or ""),
+                            "space_id": str(node.get("workspaceId") or self.config.root_space_id),
+                            "parent_id": str(node.get("parentId") or self.config.root_folder_id),
+                            "source": entry.source,
+                        }
+                        doc_id = self._extract_doc_id(doc)
+                        if doc_id and doc_id not in seen_docs:
+                            seen_docs.add(doc_id)
+                            yield doc
+                        continue
                 doc = {
                     "id": entry.token,
                     "title": "",
@@ -553,6 +825,26 @@ class DingtalkSource(BaseSource):
                     yield doc
                 continue
             if entry.entry_type == "space":
+                used_kb_discovery = False
+                if self.config.discovery_mode == "space_full":
+                    try:
+                        async for item in self._walk_space_docs_via_directories(
+                            space_id=entry.token,
+                            access_token=access_token,
+                        ):
+                            used_kb_discovery = True
+                            doc_id = self._extract_doc_id(item)
+                            if not doc_id or doc_id in seen_docs:
+                                continue
+                            seen_docs.add(doc_id)
+                            yield item
+                    except Exception as exc:
+                        self.logger.warning(
+                            "dingtalk: knowledge-base directory discovery failed, fallback to drive list: %s",
+                            exc,
+                        )
+                if used_kb_discovery:
+                    continue
                 async for item in self._list_space_items(
                     space_id=entry.token,
                     access_token=access_token,
@@ -759,69 +1051,77 @@ class DingtalkSource(BaseSource):
                 except Exception as exc:
                     self.logger.debug("dingtalk: queryByUrl metadata enrich failed: %s", exc)
 
-            doc_id = self._extract_doc_id(doc)
-            if not doc_id:
+            doc_ids = self._candidate_doc_ids(doc)
+            if not doc_ids:
                 continue
+            doc_id = doc_ids[0]
             title = str(doc.get("title") or doc.get("name") or doc_id)
             self.logger.debug("dingtalk: processing doc %s (%s)", doc_id, title)
             status = "failed"
             source = "block_tree"
             raw_content = ""
-            is_http_doc = self._is_http_entry_source(str(doc.get("source") or ""))
             try:
-                if is_http_doc:
-                    raw_content, status = await self._extract_http_doc_content(
-                        doc=doc,
-                        access_token=access_token,
-                    )
-                    source = "download_info"
-                    has_any_block = bool(raw_content.strip())
-                else:
-                    raw_content, status, has_any_block = await self._extract_doc_content(
+                has_any_block = False
+                succeeded_doc_id: str | None = None
+                for candidate_id in doc_ids:
+                    try:
+                        raw_content, status, has_any_block = await self._extract_doc_content(
+                            doc_id=candidate_id,
+                            access_token=access_token,
+                        )
+                        doc_id = candidate_id
+                        succeeded_doc_id = candidate_id
+                        break
+                    except SourceEntityNotFoundError:
+                        continue
+                    except SourceError:
+                        continue
+                    except Exception:
+                        continue
+                if succeeded_doc_id is None:
+                    status = "empty"
+                    raw_content = ""
+                source = "block_tree"
+                self.logger.debug(
+                    "dingtalk: block_tree result doc=%s status=%s content_len=%s",
+                    doc_id,
+                    status,
+                    len(raw_content),
+                )
+                if status in ("empty", "partial") and not raw_content.strip():
+                    try:
+                        direct_content, direct_status = await self._extract_doc_content_direct_api(
+                            doc_id=doc_id,
+                            access_token=access_token,
+                        )
+                        if direct_content.strip() or direct_status == "success":
+                            raw_content = direct_content
+                            status = "success" if direct_content.strip() else direct_status
+                            source = "direct_api"
+                            self.logger.debug(
+                                "dingtalk: direct_api used doc=%s status=%s content_len=%s",
+                                doc_id,
+                                status,
+                                len(raw_content),
+                            )
+                    except Exception:
+                        # Fall through to fallback extraction.
+                        pass
+
+                if status in ("empty", "partial") and not raw_content.strip():
+                    fallback_content, fallback_status = await self._extract_doc_content_fallback(
                         doc_id=doc_id,
                         access_token=access_token,
                     )
-                    source = "block_tree"
+                    raw_content = fallback_content
+                    status = fallback_status if fallback_status else status
+                    source = "fallback"
                     self.logger.debug(
-                        "dingtalk: block_tree result doc=%s status=%s content_len=%s",
+                        "dingtalk: fallback used doc=%s status=%s content_len=%s",
                         doc_id,
                         status,
                         len(raw_content),
                     )
-                    if status in ("empty", "partial") and not raw_content.strip():
-                        try:
-                            direct_content, direct_status = await self._extract_doc_content_direct_api(
-                                doc_id=doc_id,
-                                access_token=access_token,
-                            )
-                            if direct_content.strip() or direct_status == "success":
-                                raw_content = direct_content
-                                status = "success" if direct_content.strip() else direct_status
-                                source = "direct_api"
-                                self.logger.debug(
-                                    "dingtalk: direct_api used doc=%s status=%s content_len=%s",
-                                    doc_id,
-                                    status,
-                                    len(raw_content),
-                                )
-                        except Exception:
-                            # Fall through to fallback extraction.
-                            pass
-
-                    if status in ("empty", "partial") and not raw_content.strip():
-                        fallback_content, fallback_status = await self._extract_doc_content_fallback(
-                            doc_id=doc_id,
-                            access_token=access_token,
-                        )
-                        raw_content = fallback_content
-                        status = fallback_status if fallback_status else status
-                        source = "fallback"
-                        self.logger.debug(
-                            "dingtalk: fallback used doc=%s status=%s content_len=%s",
-                            doc_id,
-                            status,
-                            len(raw_content),
-                        )
 
                 if not has_any_block and status in ("empty", "partial") and not raw_content.strip():
                     status = "unsupported"

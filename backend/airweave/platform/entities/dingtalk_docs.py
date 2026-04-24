@@ -28,7 +28,7 @@ class DingtalkDocEntity(BaseEntity):
         description="Aggregated markdown content extracted from DingTalk doc body.",
         embeddable=True,
     )
-    content_source: Literal["block_tree", "direct_api", "fallback"] = AirweaveField(
+    content_source: Literal["block_tree", "direct_api", "fallback", "download_info"] = AirweaveField(
         default="block_tree",
         description="Primary extraction path used for body content.",
         embeddable=False,
