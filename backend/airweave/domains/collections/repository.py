@@ -64,7 +64,9 @@ class CollectionRepository(CollectionRepositoryProtocol):
 
             if last_job_status == "completed":
                 working_count += 1
-            elif last_job_status in ("running", "cancelling"):
+            elif last_job_status in ("running", "cancelling", "pending"):
+                # Queued jobs still mean the collection is set up; avoid "Needs Source"
+                # while the worker has not picked up the job yet.
                 working_count += 1
             elif last_job_status == "failed":
                 failing_count += 1

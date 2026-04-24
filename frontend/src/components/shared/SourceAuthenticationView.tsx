@@ -16,6 +16,7 @@ interface SourceAuthenticationViewProps {
   sourceName: string;
   sourceShortName?: string; // Added for icon display
   authenticationUrl?: string;
+  onConnect?: () => Promise<void> | void;
   onRefreshUrl?: () => void;
   isRefreshing?: boolean;
   showBorder?: boolean; // Optional border for collection detail view
@@ -26,6 +27,7 @@ export const SourceAuthenticationView: React.FC<SourceAuthenticationViewProps> =
   sourceName,
   sourceShortName,
   authenticationUrl,
+  onConnect,
   onRefreshUrl,
   isRefreshing = false,
   showBorder = false,
@@ -46,13 +48,25 @@ export const SourceAuthenticationView: React.FC<SourceAuthenticationViewProps> =
     }
   };
 
-  const handleConnect = () => {
-    if (authenticationUrl) {
-      setIsConnecting(true);
+  const handleConnect = async () => {
+    if (isConnecting) return;
+    if (!onConnect && !authenticationUrl) return;
+
+    setIsConnecting(true);
+    try {
+      if (onConnect) {
+        await onConnect();
+        return;
+      }
+
       // Small delay for visual feedback before navigation
       setTimeout(() => {
-        window.location.href = authenticationUrl;
+        window.location.href = authenticationUrl as string;
       }, 100);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to start authorization");
+    } finally {
+      setIsConnecting(false);
     }
   };
 
@@ -272,14 +286,14 @@ export const SourceAuthenticationView: React.FC<SourceAuthenticationViewProps> =
                   <TooltipTrigger asChild>
                     <button
                       onClick={handleConnect}
-                      disabled={isConnecting || !authenticationUrl}
+                      disabled={isConnecting || (!onConnect && !authenticationUrl)}
                       className={cn(
                         "inline-flex items-center gap-2",
                         "px-4 py-2 rounded-lg",
                         "text-sm font-medium",
                         "transition-all whitespace-nowrap",
 
-                        isConnecting || !authenticationUrl
+                        isConnecting || (!onConnect && !authenticationUrl)
                           ? "bg-muted text-muted-foreground cursor-not-allowed"
                           : "bg-primary text-primary-foreground hover:bg-primary/90"
                       )}

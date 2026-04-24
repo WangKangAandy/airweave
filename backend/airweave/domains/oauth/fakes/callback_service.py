@@ -21,6 +21,15 @@ class FakeOAuthCallbackService:
     def seed_oauth1_result(self, result: SourceConnectionSchema) -> None:
         self._oauth1_result = result
 
+    async def resolve_oauth_error_redirect_base(
+        self,
+        db: AsyncSession,
+        *,
+        state: Optional[str] = None,
+        oauth_token: Optional[str] = None,
+    ) -> Optional[str]:
+        return None
+
     async def complete_oauth_callback(
         self,
         db: AsyncSession,

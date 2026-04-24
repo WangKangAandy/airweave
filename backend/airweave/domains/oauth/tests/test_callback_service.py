@@ -153,6 +153,46 @@ DB.add = MagicMock()
 
 
 # ---------------------------------------------------------------------------
+# resolve_oauth_error_redirect_base
+# ---------------------------------------------------------------------------
+
+
+class TestResolveOauthErrorRedirectBase:
+    async def test_returns_none_when_state_and_token_missing(self) -> None:
+        svc = _service()
+        assert await svc.resolve_oauth_error_redirect_base(DB) is None
+
+    async def test_returns_none_when_session_not_found(self) -> None:
+        svc = _service()
+        assert await svc.resolve_oauth_error_redirect_base(DB, state="missing") is None
+
+    async def test_prefers_collection_path_from_payload(self) -> None:
+        init_repo = FakeOAuthInitSessionRepository()
+        session = _init_session(
+            state="s1",
+            payload={"readable_collection_id": "col-rid-9"},
+            overrides={"redirect_url": None},
+        )
+        init_repo.seed_by_state("s1", session)
+        svc = _service(init_session_repo=init_repo)
+        url = await svc.resolve_oauth_error_redirect_base(DB, state="s1")
+        assert url is not None
+        assert "/collections/col-rid-9" in url
+
+    async def test_resolves_via_oauth_token(self) -> None:
+        init_repo = FakeOAuthInitSessionRepository()
+        session = _init_session(
+            payload={"readable_collection_id": "tok-col"},
+            overrides={},
+        )
+        init_repo.seed_by_oauth_token("req-secret", session)
+        svc = _service(init_session_repo=init_repo)
+        url = await svc.resolve_oauth_error_redirect_base(DB, oauth_token="req-secret")
+        assert url is not None
+        assert "/collections/tok-col" in url
+
+
+# ---------------------------------------------------------------------------
 # complete_oauth_callback
 # ---------------------------------------------------------------------------
 

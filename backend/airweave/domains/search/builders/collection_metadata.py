@@ -74,6 +74,10 @@ class CollectionMetadataBuilder:
             "An AI-powered knowledge base platform for creating, organizing, and "
             "publishing documentation for customers and internal teams."
         ),
+        "dingtalk": (
+            "DingTalk cloud documents and folders synced from configured entries "
+            "using app + fixed operator visibility context."
+        ),
         "dropbox": (
             "A cloud storage and file-sync service for storing, sharing, and accessing "
             "files across devices."

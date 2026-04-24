@@ -88,6 +88,7 @@ from .document360 import (
     Document360CategoryEntity,
     Document360ProjectVersionEntity,
 )
+from .dingtalk_docs import DingtalkDocEntity
 from .dropbox import (
     DropboxAccountEntity,
     DropboxFileEntity,
@@ -437,6 +438,9 @@ ENTITIES_BY_SOURCE: dict[str, list[type]] = {
         Document360ArticleEntity,
         Document360CategoryEntity,
         Document360ProjectVersionEntity,
+    ],
+    "dingtalk": [
+        DingtalkDocEntity,
     ],
     "dropbox": [
         DropboxAccountEntity,

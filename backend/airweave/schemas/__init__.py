@@ -89,7 +89,10 @@ from .search_query import (
     SearchQueryResponse,
     SearchQueryUpdate,
 )
-from .source import LocalGitMountRootsResponse, Source
+from .source import (
+    LocalGitMountRootsResponse,
+    Source,
+)
 from .source_connection import (
     AuthenticationDetails,
     AuthenticationMethod,
@@ -104,6 +107,7 @@ from .source_connection import (
     SourceConnectionUpdate,
     SyncDetails,
     SyncJobDetails,
+    ReinitiateOAuthRequest,
     VerifyOAuthRequest,
 )
 from .source_rate_limit import (

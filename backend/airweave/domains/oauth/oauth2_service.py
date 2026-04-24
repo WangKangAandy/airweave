@@ -151,16 +151,27 @@ class OAuth2Service(OAuth2ServiceProtocol):
         """
         oauth2_settings = await self._get_oauth2_settings(source_short_name)
 
+        if not client_id:
+            client_id = oauth2_settings.client_id
+        if not client_secret:
+            client_secret = oauth2_settings.client_secret
+
+        if source_short_name == "dingtalk":
+            from airweave.platform.sources.dingtalk_oauth import (
+                exchange_dingtalk_authorization_code,
+            )
+
+            return await exchange_dingtalk_authorization_code(
+                code=code,
+                client_id=client_id,
+                client_secret=client_secret,
+            )
+
         redirect_uri = self._get_redirect_url(source_short_name)
 
         backend_url = self._resolve_backend_url(
             oauth2_settings, source_short_name, template_configs
         )
-
-        if not client_id:
-            client_id = oauth2_settings.client_id
-        if not client_secret:
-            client_secret = oauth2_settings.client_secret
 
         return await self._exchange_code(
             logger=ctx.logger,
@@ -276,14 +287,25 @@ class OAuth2Service(OAuth2ServiceProtocol):
         """
         oauth2_settings = await self._get_oauth2_settings(source_short_name)
 
-        backend_url = self._resolve_backend_url(
-            oauth2_settings, source_short_name, template_configs
-        )
-
         if not client_id:
             client_id = oauth2_settings.client_id
         if not client_secret:
             client_secret = oauth2_settings.client_secret
+
+        if source_short_name == "dingtalk":
+            from airweave.platform.sources.dingtalk_oauth import (
+                exchange_dingtalk_authorization_code,
+            )
+
+            return await exchange_dingtalk_authorization_code(
+                code=code,
+                client_id=client_id,
+                client_secret=client_secret,
+            )
+
+        backend_url = self._resolve_backend_url(
+            oauth2_settings, source_short_name, template_configs
+        )
 
         return await self._exchange_code(
             logger=ctx.logger,

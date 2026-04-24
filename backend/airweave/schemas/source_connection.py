@@ -890,6 +890,15 @@ class VerifyOAuthRequest(BaseModel):
     claim_token: str = Field(..., description="Claim token from create response")
 
 
+class ReinitiateOAuthRequest(BaseModel):
+    """Optional body when re-starting OAuth for an existing connection."""
+
+    redirect_url: Optional[str] = Field(
+        None,
+        description="URL to redirect to after OAuth (use browser origin + /collections/{readable_id})",
+    )
+
+
 def compute_status(
     source_conn: Any,
     last_job_status: Optional[SyncJobStatus] = None,

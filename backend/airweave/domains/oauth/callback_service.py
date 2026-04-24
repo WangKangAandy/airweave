@@ -8,7 +8,7 @@ import hashlib
 import hmac
 from collections.abc import Mapping
 from datetime import datetime, timezone
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 from uuid import UUID, uuid4
 
 from fastapi import HTTPException
@@ -28,6 +28,7 @@ from airweave.db.unit_of_work import UnitOfWork
 from airweave.domains.collections.protocols import CollectionRepositoryProtocol
 from airweave.domains.connections.protocols import ConnectionRepositoryProtocol
 from airweave.domains.credentials.protocols import IntegrationCredentialRepositoryProtocol
+from airweave.domains.oauth.browser_redirect import post_oauth_browser_return_url
 from airweave.domains.oauth.protocols import (
     OAuthFlowServiceProtocol,
     OAuthInitSessionRepositoryProtocol,
@@ -127,6 +128,30 @@ class OAuthCallbackService:
     # Public API
     # ------------------------------------------------------------------
 
+    async def resolve_oauth_error_redirect_base(
+        self,
+        db: AsyncSession,
+        *,
+        state: str | None = None,
+        oauth_token: str | None = None,
+    ) -> str | None:
+        """Return SPA URL from init session so callback errors avoid the app root."""
+        init_session: ConnectionInitSession | None = None
+        if state:
+            init_session = await self._init_session_repo.get_by_state_no_auth(db, state=state)
+        elif oauth_token:
+            init_session = await self._init_session_repo.get_by_oauth_token_no_auth(
+                db, oauth_token=oauth_token
+            )
+        if not init_session:
+            return None
+        overrides = init_session.overrides or {}
+        payload = init_session.payload or {}
+        redirect_url = overrides.get("redirect_url")
+        rid_raw = payload.get("readable_collection_id")
+        rid = rid_raw.strip() if isinstance(rid_raw, str) else ""
+        return post_oauth_browser_return_url(redirect_url, readable_collection_id=rid)
+
     async def complete_oauth_callback(
         self,
         db: AsyncSession,
@@ -196,6 +221,17 @@ class OAuthCallbackService:
             init_session.short_name, code, init_session.overrides, ctx
         )
 
+        if init_session.short_name == "dingtalk":
+            from airweave.platform.sources.dingtalk_oauth import fetch_dingtalk_union_id
+
+            union_id = await fetch_dingtalk_union_id(token_response.access_token)
+            payload = dict(init_session.payload or {})
+            cfg = dict(payload.get("config") or {})
+            cfg["operator_union_id"] = union_id
+            payload["config"] = cfg
+            init_session.payload = payload
+            await db.flush()
+
         try:
             source_entry = self._source_registry.get(init_session.short_name)
         except KeyError:
@@ -206,6 +242,7 @@ class OAuthCallbackService:
             source_entry=source_entry,
             access_token=token_response.access_token,
             ctx=ctx,
+            init_session=init_session,
         )
 
         source_conn = await self._complete_oauth2_connection(
@@ -591,15 +628,23 @@ class OAuthCallbackService:
         source_entry: SourceRegistryEntry | None,
         access_token: str,
         ctx: ApiContext,
+        init_session: ConnectionInitSession | None = None,
     ) -> None:
         """Validate OAuth2 token using source lifecycle service; fail callback if invalid."""
         if not source_entry:
             return
 
+        config: Optional[Dict[str, Any]] = None
+        if init_session and init_session.payload:
+            raw_cfg = init_session.payload.get("config")
+            if isinstance(raw_cfg, dict):
+                config = raw_cfg
+
         try:
             await self._source_lifecycle.validate(
                 short_name=source_entry.short_name,
                 credentials=access_token,
+                config=config,
             )
         except (SourceNotFoundError, SourceError) as e:
             raise http_exception_for_credential_validation(
@@ -806,10 +851,18 @@ class OAuthCallbackService:
         sync_schema = schemas.Sync.model_validate(sync, from_attributes=True)
 
         if not source_conn.connection_id:
-            raise ValueError(f"Source connection {source_conn.id} has no connection_id")
+            ctx.logger.warning(
+                f"_run_sync_workflow: source connection {source_conn.id} has no connection_id, "
+                "skipping immediate workflow trigger"
+            )
+            return
         conn_model = await self._connection_repo.get(db, id=source_conn.connection_id, ctx=ctx)
         if not conn_model:
-            raise ValueError(f"Connection {source_conn.connection_id} not found")
+            ctx.logger.warning(
+                f"_run_sync_workflow: connection {source_conn.connection_id} not found, "
+                "skipping immediate workflow trigger"
+            )
+            return
         connection_schema = schemas.Connection.model_validate(conn_model, from_attributes=True)
 
         try:
@@ -828,13 +881,19 @@ class OAuthCallbackService:
         except Exception as e:
             ctx.logger.warning(f"Failed to publish sync.pending event: {e}")
 
-        await self._temporal_workflow_service.run_source_connection_workflow(
-            sync=sync_schema,
-            sync_job=sync_job_schema,
-            collection=collection_schema,
-            connection=connection_schema,
-            ctx=ctx,
-        )
+        # OAuth callback must return a valid redirect even when Temporal is down or misconfigured.
+        try:
+            await self._temporal_workflow_service.run_source_connection_workflow(
+                sync=sync_schema,
+                sync_job=sync_job_schema,
+                collection=collection_schema,
+                connection=connection_schema,
+                ctx=ctx,
+            )
+        except Exception as e:
+            ctx.logger.exception(
+                f"Failed to start sync workflow for source_connection_id={source_conn.id}: {e}"
+            )
 
     # ------------------------------------------------------------------
     # Private: inline helpers
