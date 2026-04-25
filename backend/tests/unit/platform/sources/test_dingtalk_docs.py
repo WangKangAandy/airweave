@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from airweave.domains.sources.exceptions import SourceError
 from airweave.platform.configs.config import DingtalkConfig
 from airweave.platform.sources.dingtalk_docs import DingtalkSource
 from airweave.platform.sources.resolvers.base import BatchResolveResult
@@ -64,7 +65,9 @@ async def test_resolve_primary_entries_prefers_links():
 @pytest.mark.asyncio
 async def test_extract_doc_id_prefers_doc_key_before_dentry_uuid():
     """docKey should be preferred for docs APIs over dentryUuid."""
-    source = await _make_source(DingtalkConfig(root_space_id="space-1", operator_union_id="operator-1"))
+    source = await _make_source(
+        DingtalkConfig(links="doc:doc-1", root_space_id="space-1", operator_union_id="operator-1")
+    )
     item = {
         "dentryUuid": "uuid-1",
         "docKey": "doc-key-1",
@@ -77,7 +80,9 @@ async def test_extract_doc_id_prefers_doc_key_before_dentry_uuid():
 @pytest.mark.asyncio
 async def test_extract_item_type_uses_dentry_type():
     """dentryType should drive folder/doc classification for directory API results."""
-    source = await _make_source(DingtalkConfig(root_space_id="space-1", operator_union_id="operator-1"))
+    source = await _make_source(
+        DingtalkConfig(links="doc:doc-1", root_space_id="space-1", operator_union_id="operator-1")
+    )
     folder_item = {"dentryType": "folder"}
     file_item = {"dentryType": "file"}
     assert source._is_folder_type(folder_item) is True
@@ -88,7 +93,7 @@ async def test_extract_item_type_uses_dentry_type():
 @pytest.mark.asyncio
 async def test_generate_entities_marks_unsupported_when_all_content_paths_empty():
     """unsupported status is emitted when block/direct/fallback all yield empty."""
-    config = DingtalkConfig(root_space_id="space-1", operator_union_id="operator-1")
+    config = DingtalkConfig(links="doc:doc-1", root_space_id="space-1", operator_union_id="operator-1")
     source = await _make_source(config)
 
     async def _discover():
@@ -131,7 +136,7 @@ async def test_generate_entities_marks_unsupported_when_all_content_paths_empty(
 @pytest.mark.asyncio
 async def test_generate_entities_retries_content_with_candidate_doc_ids():
     """When first id fails, content extraction should retry other candidate ids."""
-    config = DingtalkConfig(root_space_id="space-1", operator_union_id="operator-1")
+    config = DingtalkConfig(links="doc:doc-1", root_space_id="space-1", operator_union_id="operator-1")
     source = await _make_source(config)
 
     async def _discover():
@@ -170,9 +175,54 @@ async def test_generate_entities_retries_content_with_candidate_doc_ids():
 
 
 @pytest.mark.asyncio
+async def test_get_doc_blocks_prefers_suites_endpoint():
+    """Doc blocks should prefer suites endpoint and parse result.data shape."""
+    config = DingtalkConfig(links="doc:doc-1", root_space_id="space-1", operator_union_id="operator-1")
+    source = await _make_source(config)
+
+    with patch.object(
+        source,
+        "_get",
+        new_callable=AsyncMock,
+        return_value={"result": {"data": [{"blockType": "paragraph", "paragraph": {"text": "hello"}}]}},
+    ) as m_get:
+        blocks = await source._get_doc_blocks(doc_id="doc-key-1", access_token="token")
+
+    assert len(blocks) == 1
+    assert blocks[0]["blockType"] == "paragraph"
+    first_call = m_get.await_args_list[0]
+    assert "/v1.0/doc/suites/documents/doc-key-1/blocks" in first_call.args[0]
+    assert first_call.kwargs["params"]["operatorId"] == "operator-1"
+
+
+@pytest.mark.asyncio
+async def test_get_doc_blocks_falls_back_to_legacy_docs_endpoint():
+    """When suites endpoint fails, blocks should fallback to legacy docs endpoint."""
+    config = DingtalkConfig(links="doc:doc-1", root_space_id="space-1", operator_union_id="operator-1")
+    source = await _make_source(config)
+
+    with patch.object(
+        source,
+        "_get",
+        new_callable=AsyncMock,
+        side_effect=[
+            RuntimeError("suites failed"),
+            {"items": [{"blockType": "paragraph", "paragraph": {"text": "legacy"}}]},
+        ],
+    ) as m_get:
+        blocks = await source._get_doc_blocks(doc_id="doc-key-1", access_token="token")
+
+    assert len(blocks) == 1
+    assert blocks[0]["blockType"] == "paragraph"
+    assert m_get.await_count == 2
+    assert "/v1.0/doc/suites/documents/doc-key-1/blocks" in m_get.await_args_list[0].args[0]
+    assert "/v1.0/docs/doc-key-1/blocks" in m_get.await_args_list[1].args[0]
+
+
+@pytest.mark.asyncio
 async def test_generate_entities_prefers_direct_api_when_block_tree_empty():
     """direct_api path should be used when block tree has no content."""
-    config = DingtalkConfig(root_space_id="space-1", operator_union_id="operator-1")
+    config = DingtalkConfig(links="doc:doc-1", root_space_id="space-1", operator_union_id="operator-1")
     source = await _make_source(config)
 
     async def _discover():
@@ -264,10 +314,10 @@ async def test_probe_scope_folder_http_links_probe_directory_permission():
         },
     ) as m_post, patch.object(
         source,
-        "_resolve_folder_parent_dentry_id",
+        "_resolve_folder_scope_target",
         new_callable=AsyncMock,
-        return_value="folder-dentry-1",
-    ) as m_resolve_parent, patch.object(
+        return_value=("space-1", "folder-dentry-1"),
+    ) as m_resolve_scope, patch.object(
         source,
         "_list_space_directory_items",
         side_effect=lambda **kwargs: _dirs(),
@@ -275,12 +325,91 @@ async def test_probe_scope_folder_http_links_probe_directory_permission():
         await source._probe_scope(entry=entry, access_token="token")
 
     m_post.assert_awaited_once()
-    m_resolve_parent.assert_awaited_once_with(
+    m_resolve_scope.assert_awaited_once_with(
         space_id="space-1",
         node_id="folder-1",
         access_token="token",
     )
     m_dirs.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_probe_scope_folder_http_links_fallback_when_directories_returns_500():
+    """Folder scope probe should fallback to drive listing on upstream 500."""
+    config = DingtalkConfig(
+        links="https://alidocs.dingtalk.com/i/nodes/y20BglGWOGOqOLm2T9ovAq0eWA7depqY",
+        operator_union_id="operator-1",
+    )
+    source = await _make_source(config)
+    entry = ResolvedDingTalkEntry(
+        "doc",
+        "y20BglGWOGOqOLm2T9ovAq0eWA7depqY",
+        "https://alidocs.dingtalk.com/i/nodes/y20BglGWOGOqOLm2T9ovAq0eWA7depqY",
+    )
+
+    async def _space_items():
+        yield {"id": "fallback-1", "type": "file"}
+
+    with patch.object(
+        source,
+        "_post",
+        new_callable=AsyncMock,
+        return_value={
+            "node": {
+                "type": "FOLDER",
+                "hasChildren": True,
+                "workspaceId": "space-1",
+                "nodeId": "folder-1",
+            }
+        },
+    ), patch.object(
+        source,
+        "_resolve_folder_scope_target",
+        new_callable=AsyncMock,
+        return_value=("space-1", "folder-dentry-1"),
+    ), patch.object(
+        source,
+        "_list_space_directory_items",
+        side_effect=SourceError("Server error (500): 系统内部错误"),
+    ) as m_dirs, patch.object(
+        source,
+        "_list_space_items",
+        side_effect=lambda **kwargs: _space_items(),
+    ) as m_space_items:
+        await source._probe_scope(entry=entry, access_token="token")
+
+    m_dirs.assert_called_once()
+    m_space_items.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_resolve_folder_scope_target_prefers_query_dentry_mapping():
+    """Team-space links should use queryDentryId spaceId+dentryId mapping."""
+    config = DingtalkConfig(
+        links="https://alidocs.dingtalk.com/i/nodes/y20BglGWOGOqOLm2T9ovAq0eWA7depqY",
+        operator_union_id="operator-1",
+    )
+    source = await _make_source(config)
+
+    with patch.object(
+        source,
+        "_resolve_dentry_id",
+        new_callable=AsyncMock,
+        return_value=("8861280827", "137663188206"),
+    ) as m_resolve_dentry, patch.object(
+        source,
+        "_resolve_folder_parent_dentry_id",
+        new_callable=AsyncMock,
+    ) as m_legacy_parent:
+        resolved_space_id, parent_dentry_id = await source._resolve_folder_scope_target(
+            space_id="Kw8lASozkMdmDVaE",
+            node_id="y20BglGWOGOqOLm2T9ovAq0eWA7depqY",
+            access_token="token",
+        )
+
+    assert (resolved_space_id, parent_dentry_id) == ("8861280827", "137663188206")
+    m_resolve_dentry.assert_awaited_once()
+    m_legacy_parent.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -488,10 +617,10 @@ async def test_discover_docs_http_folder_link_expands_children():
         },
     ) as m_query, patch.object(
         source,
-        "_resolve_folder_parent_dentry_id",
+        "_resolve_folder_scope_target",
         new_callable=AsyncMock,
-        return_value="dentry-1",
-    ) as m_resolve_parent, patch.object(
+        return_value=("space-1", "dentry-1"),
+    ) as m_resolve_scope, patch.object(
         source,
         "_walk_space_docs_via_directories",
         side_effect=lambda **kwargs: _kb_docs(),
@@ -501,7 +630,7 @@ async def test_discover_docs_http_folder_link_expands_children():
             docs.append(doc)
 
     m_query.assert_awaited_once()
-    m_resolve_parent.assert_awaited_once_with(
+    m_resolve_scope.assert_awaited_once_with(
         space_id="space-1",
         node_id="folder-1",
         access_token="token",

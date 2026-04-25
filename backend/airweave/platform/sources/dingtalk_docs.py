@@ -61,6 +61,7 @@ class DingtalkSource(BaseSource):
         "folder_files": "/v1.0/drive/folders/{folder_id}/files",
         "space_directories": "/v2.0/doc/spaces/{space_id}/directories",
         "doc_blocks": "/v1.0/docs/{doc_id}/blocks",
+        "doc_suites_blocks": "/v1.0/doc/suites/documents/{doc_id}/blocks",
         "doc_content": "/v1.0/docs/{doc_id}/content",
         "doc_meta": "/v1.0/docs/{doc_id}",
         "wiki_query_by_url": "/v2.0/wiki/nodes/queryByUrl",
@@ -253,16 +254,37 @@ class DingtalkSource(BaseSource):
         node_id = str(node.get("nodeId") or "")
         if not space_id or not node_id:
             return
-        parent_dentry_id = await self._resolve_folder_parent_dentry_id(
+        effective_space_id, parent_dentry_id = await self._resolve_folder_scope_target(
             space_id=space_id,
             node_id=node_id,
             access_token=access_token,
         )
-        # Folder link scope must also verify directory-list permission.
-        async for _ in self._list_space_directory_items(
-            space_id=space_id,
+        # Folder link scope should verify directory-list permission when available.
+        # Some team spaces intermittently return 500 on directories even with valid
+        # credentials; in that case we fallback to drive listing for scope probe only.
+        try:
+            async for _ in self._list_space_directory_items(
+                space_id=effective_space_id,
+                access_token=access_token,
+                parent_dentry_id=parent_dentry_id,
+                page_size=1,
+            ):
+                break
+            return
+        except SourceError as exc:
+            if "Server error (500)" not in str(exc):
+                raise
+            self.logger.warning(
+                "dingtalk: directory scope probe returned upstream 500, "
+                "fallback to drive listing probe (space_id=%s, node_id=%s): %s",
+                space_id,
+                node_id,
+                exc,
+            )
+
+        async for _ in self._list_space_items(
+            space_id=effective_space_id,
             access_token=access_token,
-            parent_dentry_id=parent_dentry_id,
             page_size=1,
         ):
             break
@@ -337,6 +359,31 @@ class DingtalkSource(BaseSource):
             pass
 
         return node_id
+
+    async def _resolve_folder_scope_target(
+        self,
+        *,
+        space_id: str,
+        node_id: str,
+        access_token: str,
+    ) -> tuple[str, str]:
+        """Resolve effective space and parent dentry for folder traversal.
+
+        Team-space links can expose workspaceId in queryByUrl while doc
+        directory APIs require the numeric spaceId from queryDentryId.
+        Prefer queryDentryId mapping when available; fallback to legacy behavior.
+        """
+        resolved = await self._resolve_dentry_id(dentry_uuid=node_id, access_token=access_token)
+        if resolved:
+            resolved_space_id, resolved_dentry_id = resolved
+            if resolved_space_id and resolved_dentry_id:
+                return resolved_space_id, resolved_dentry_id
+
+        return space_id, await self._resolve_folder_parent_dentry_id(
+            space_id=space_id,
+            node_id=node_id,
+            access_token=access_token,
+        )
 
     def _operator_union_id(self) -> str:
         """Return normalized operator union id."""
@@ -489,6 +536,7 @@ class DingtalkSource(BaseSource):
             (data.get("result") or {}).get("items"),
             (data.get("result") or {}).get("list"),
             (data.get("result") or {}).get("files"),
+            (data.get("result") or {}).get("data"),
         ]
         for candidate in candidates:
             if isinstance(candidate, list):
@@ -781,13 +829,15 @@ class DingtalkSource(BaseSource):
                         if node_type == "FOLDER" or bool(node.get("hasChildren")):
                             space_id = str(node.get("workspaceId") or "")
                             if space_id and node_id:
-                                parent_dentry_id = await self._resolve_folder_parent_dentry_id(
-                                    space_id=space_id,
-                                    node_id=node_id,
-                                    access_token=access_token,
+                                effective_space_id, parent_dentry_id = (
+                                    await self._resolve_folder_scope_target(
+                                        space_id=space_id,
+                                        node_id=node_id,
+                                        access_token=access_token,
+                                    )
                                 )
                                 async for item in self._walk_space_docs_via_directories(
-                                    space_id=space_id,
+                                    space_id=effective_space_id,
                                     access_token=access_token,
                                     parent_dentry_id=parent_dentry_id,
                                     depth=0,
@@ -897,23 +947,41 @@ class DingtalkSource(BaseSource):
         blocks: list[dict] = []
         cursor: str | None = None
         while True:
-            params: dict[str, Any] = {
+            params_suites: dict[str, Any] = {
+                "operatorId": (self.config.operator_union_id or "").strip(),
+            }
+            if cursor:
+                params_suites["nextToken"] = cursor
+            params_legacy: dict[str, Any] = {
                 "size": 200,
                 **self._operator_params(),
             }
             if cursor:
-                params["cursor"] = cursor
-            data = await self._get(
-                self.API_PATHS["doc_blocks"].format(doc_id=doc_id),
-                access_token=access_token,
-                params=params,
-            )
+                params_legacy["cursor"] = cursor
+
+            # Prefer suites/documents endpoint (works with docKey returned by directories API).
+            # Keep legacy docs endpoint as fallback for backward compatibility.
+            try:
+                data = await self._get(
+                    self.API_PATHS["doc_suites_blocks"].format(doc_id=doc_id),
+                    access_token=access_token,
+                    params=params_suites,
+                )
+            except Exception:
+                data = await self._get(
+                    self.API_PATHS["doc_blocks"].format(doc_id=doc_id),
+                    access_token=access_token,
+                    params=params_legacy,
+                )
             page_blocks = self._extract_items(data)
             blocks.extend(page_blocks)
             next_cursor = (
                 data.get("nextCursor")
+                or data.get("nextToken")
                 or (data.get("data") or {}).get("nextCursor")
+                or (data.get("data") or {}).get("nextToken")
                 or (data.get("result") or {}).get("nextCursor")
+                or (data.get("result") or {}).get("nextToken")
             )
             if not next_cursor:
                 break

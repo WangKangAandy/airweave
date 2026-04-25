@@ -2,6 +2,29 @@
 
 本文档描述将 Confluence 从 **Atlassian Cloud OAuth + 网关 API** 转向 **企业内网站点 + PAT（或等效 Token）直连 REST** 的重构范围、原则与交付阶段。目标场景为 **mthreads 内网 Wiki 可被 Airweave 检索**；搜索范围策略为 **全站可搜**（在 Token 授权可见范围内）。
 
+### mthreads 联调：站点基址（可入仓）
+
+| 项 | 值 |
+|----|-----|
+| 站点根 URL | `https://confluence.mthreads.com` |
+| REST 示例 | `https://confluence.mthreads.com/rest/api/...` |
+
+**安全（必须遵守）**：Personal Access Token（PAT）**不得**写入本仓库、本文档、Issue 或聊天等可复制传播的位置；**只能**通过本机环境变量（如 `CONFLUENCE_PAT`）、密钥管理系统或 CI 密钥注入使用。若 PAT 曾以明文泄露，须在 Confluence 侧**立即撤销并轮换**。
+
+本机验证示例（**不要把真实 PAT 写进文件**；在 shell 里 `export` 即可）：
+
+```bash
+export CONFLUENCE_SITE_URL='https://confluence.mthreads.com'
+export CONFLUENCE_PAT='…'   # 仅在本机终端设置，勿提交
+
+curl -sS \
+  -H "Authorization: Bearer ${CONFLUENCE_PAT}" \
+  -H "Accept: application/json" \
+  "${CONFLUENCE_SITE_URL}/rest/api/content?limit=1"
+```
+
+更完整的探测可使用：`backend/scripts/confluence_site_pat_smoke.py`（同样只通过环境变量传入 PAT）。
+
 ---
 
 ## 1. 背景与动机
@@ -35,10 +58,6 @@
 - 与历史 Confluence **Cloud 连接器**在实体类型上逐项对齐（博客、全量 comment、Database/Folder 等）。
 - **Atlassian 网关**、**Cloud ID**、**OAuth refresh 轮换** 作为内网主路径的依赖。
 - **增量游标/连续同步**（可后续迭代；MVP 可用定时全量或简单位点）。
-
-### 2.3 与 MCP 方案的关系
-
-- 仓库另有 [confluence-mcp-gateway-plan.md](./confluence-mcp-gateway-plan.md)（按需 MCP、不全量索引）。本重构以 **「同步 + 索引可搜」** 为主，与 MCP gateway 文档互补，不互相替代。
 
 ---
 
@@ -82,7 +101,7 @@ flowchart LR
 
 ## 5. 全链路：从「拉正文」到「可搜」
 
-**说明用户查询与 Confluence 的关系**：下列流程描述 **一次同步作业**；用户在 UI 的「搜索」**不** 直接请求 Confluence 的搜索接口，而是查 **已写入向量目标的数据**（除非另做 MCP/联邦检索）。
+**说明用户查询与 Confluence 的关系**：下列流程描述 **一次同步作业**；用户在 UI 的「搜索」**不** 直接请求 Confluence 的搜索接口，而是查 **Airweave 已写入向量目标、经同步管道索引后的数据**。
 
 | 步骤 | 作用 |
 |------|------|
@@ -150,7 +169,7 @@ flowchart LR
 | 阶段 | 内容 | 产出 |
 |------|------|------|
 | **P0** | 新源 + 凭证模型（`site_url`、`api_token`）；HTTP 直连站点；**从产品中移除 Confluence 的 OAuth/登录建连** | 内网 CQL/单空间可 dry-run |
-| **P1** | 全站列表或 CQL 分页、按 id 拉正文、落盘与索引 | **全站可搜** MVP（索引语义见 §5） |
+| **P1** | 全站列表或 CQL 分页、按 id 拉正文、落盘与索引；补充 `body.storage`（XHTML/Storage）轻量后处理（标签降噪、空白归一、宏标记最小清洗） | **全站可搜** MVP + 基础检索质量优化（索引语义见 §5） |
 | **P2** | 限流、大页/宏、错误重试、观测 | 可运维性 |
 | **P3**（可选） | 增量、附件 | 视需求 |
 
@@ -161,6 +180,7 @@ flowchart LR
 - **Confluence 版本差异**：DC/Server 的 REST 行为、分页参数需以目标实例为准。
 - **权限**：PAT 仅能索引用其 **可见** 页面；**全站** = 该令牌的可见全集，非匿名全库。
 - **安全**：PAT 按组织级密钥与轮换管理，**禁止**入仓与日志明文。
+- **正文格式与检索质量**：`body.storage` 多为 XHTML/Storage（非 Markdown）；若不做最小后处理，宏标签/样式噪声可能影响分块与召回质量。建议在 P1 增加单测锁定正文格式契约（`representation` / `value`）并验证后处理后的可检索文本质量。
 
 ---
 
@@ -189,3 +209,6 @@ flowchart LR
 |------|------|
 | 2026-04-23 | 初稿：全站可搜、站点 + Token 方向；重构期对 OAuth 的处置说明 |
 | 2026-04-23 | 明确 **去除原有登录 / OAuth 验证主路径**；补充 §5 全链路与 §6 API 对照（Cloud / 站点） |
+| 2026-04-24 | 删除 Confluence MCP 网关/代理方案表述；检索路径统一为 **Confluence → Airweave 同步管道 → 本侧向量检索** |
+| 2026-04-24 | 补充 mthreads 联调站点 URL；明确 PAT **禁止**入仓，仅环境变量 / 密钥系统 |
+| 2026-04-24 | 在 P1 中补充 `body.storage`（XHTML/Storage）后处理与正文格式单测建议，降低分块检索噪声风险 |
