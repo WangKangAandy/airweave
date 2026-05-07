@@ -30,12 +30,24 @@ from typing import Any, Dict, List, Optional
 from pydantic import computed_field
 
 from airweave.platform.entities._airweave_field import AirweaveField
-from airweave.platform.entities._base import BaseEntity, Breadcrumb, FileEntity
+from airweave.platform.entities._base import BaseEntity, Breadcrumb, DeletionEntity, FileEntity
 
 
 def _strip_html(html: str) -> str:
     """Remove HTML tags, returning plain text."""
     return re.sub(r"<[^>]+>", "", html)
+
+
+def _as_str(value: Any) -> str:
+    """Normalize Confluence API identifier values to strings."""
+    return str(value)
+
+
+def _as_optional_str(value: Any) -> Optional[str]:
+    """Normalize optional identifier-like values to strings."""
+    if value is None:
+        return None
+    return str(value)
 
 
 class ConfluenceSpaceEntity(BaseEntity):
@@ -84,13 +96,14 @@ class ConfluenceSpaceEntity(BaseEntity):
         site_url: str = "",
     ) -> ConfluenceSpaceEntity:
         """Build from a Confluence API space JSON object."""
+        space_id = _as_str(data["id"])
         return cls(
-            entity_id=data["id"],
+            entity_id=space_id,
             breadcrumbs=[],
             name=data.get("name"),
             created_at=data.get("createdAt"),
             updated_at=data.get("updatedAt"),
-            space_id=data["id"],
+            space_id=space_id,
             space_name=data["name"],
             space_key=data["key"],
             space_type=data.get("type"),
@@ -169,7 +182,7 @@ class ConfluencePageEntity(FileEntity):
         """Build from a Confluence API page-detail JSON object (with body-format=storage)."""
         body_content = data.get("body", {}).get("storage", {}).get("value", "")
         page_title = data.get("title", "Untitled Page")
-        page_id = data["id"]
+        page_id = _as_str(data["id"])
 
         return cls(
             entity_id=page_id,
@@ -184,7 +197,7 @@ class ConfluencePageEntity(FileEntity):
             local_path=None,
             content_id=page_id,
             title=data.get("title", "Untitled"),
-            space_id=data.get("space", {}).get("id"),
+            space_id=_as_optional_str(data.get("space", {}).get("id")),
             space_key=space_key,
             body=body_content,
             version=data.get("version", {}).get("number"),
@@ -250,15 +263,16 @@ class ConfluenceBlogPostEntity(BaseEntity):
         site_url: Optional[str] = None,
     ) -> ConfluenceBlogPostEntity:
         """Build from a Confluence API blog-post JSON object."""
+        content_id = _as_str(data["id"])
         return cls(
-            entity_id=data["id"],
+            entity_id=content_id,
             breadcrumbs=breadcrumbs,
             name=data.get("title", "Untitled Blog Post"),
             created_at=data.get("createdAt"),
             updated_at=data.get("updatedAt"),
-            content_id=data["id"],
+            content_id=content_id,
             title=data.get("title"),
-            space_id=data.get("spaceId"),
+            space_id=_as_optional_str(data.get("spaceId")),
             space_key=space_key,
             body=data.get("body", {}).get("storage", {}).get("value"),
             version=data.get("version", {}).get("number"),
@@ -324,17 +338,18 @@ class ConfluenceCommentEntity(BaseEntity):
         comment_text = data.get("body", {}).get("storage", {}).get("value", "")
         text_preview = _strip_html(comment_text)[:50]
         name = text_preview + "..." if len(text_preview) == 50 else text_preview
+        comment_id = _as_str(data["id"])
         if not name:
-            name = f"Comment {data['id']}"
+            name = f"Comment {comment_id}"
 
         return cls(
-            entity_id=data["id"],
+            entity_id=comment_id,
             breadcrumbs=breadcrumbs,
             name=name,
             created_at=data.get("createdAt"),
             updated_at=data.get("updatedAt"),
-            comment_id=data["id"],
-            parent_content_id=data.get("container", {}).get("id"),
+            comment_id=comment_id,
+            parent_content_id=_as_optional_str(data.get("container", {}).get("id")),
             parent_space_key=parent_space_key,
             text=comment_text,
             created_by=data.get("createdBy"),
@@ -392,13 +407,14 @@ class ConfluenceDatabaseEntity(BaseEntity):
         space_key: str,
     ) -> ConfluenceDatabaseEntity:
         """Build from a Confluence API database JSON object."""
+        content_id = _as_str(data["id"])
         return cls(
-            entity_id=data["id"],
+            entity_id=content_id,
             breadcrumbs=breadcrumbs,
             name=data.get("title", "Untitled Database"),
             created_at=data.get("createdAt"),
             updated_at=data.get("updatedAt"),
-            content_id=data["id"],
+            content_id=content_id,
             title=data.get("title"),
             space_key=space_key,
             description=data.get("description"),
@@ -442,13 +458,14 @@ class ConfluenceFolderEntity(BaseEntity):
         space_key: str,
     ) -> ConfluenceFolderEntity:
         """Build from a Confluence API folder JSON object."""
+        content_id = _as_str(data["id"])
         return cls(
-            entity_id=data["id"],
+            entity_id=content_id,
             breadcrumbs=breadcrumbs,
             name=data.get("title", "Untitled Folder"),
             created_at=data.get("createdAt"),
             updated_at=data.get("updatedAt"),
-            content_id=data["id"],
+            content_id=content_id,
             title=data.get("title"),
             space_key=space_key,
             status=data.get("status"),
@@ -492,16 +509,17 @@ class ConfluenceLabelEntity(BaseEntity):
         data: Dict[str, Any],
     ) -> ConfluenceLabelEntity:
         """Build from a Confluence API label JSON object."""
+        label_id = _as_str(data["id"])
         return cls(
-            entity_id=data["id"],
+            entity_id=label_id,
             breadcrumbs=[],
             name=data.get("name"),
             created_at=None,
             updated_at=None,
-            label_id=data["id"],
+            label_id=label_id,
             label_name=data["name"],
             label_type=data.get("type"),
-            owner_id=data.get("ownerId"),
+            owner_id=_as_optional_str(data.get("ownerId")),
         )
 
     @computed_field(return_type=str)
@@ -546,6 +564,34 @@ class ConfluenceTaskEntity(BaseEntity):
     )
     due_date: Optional[Any] = AirweaveField(
         None, description="Due date/time if applicable.", embeddable=True
+    )
+
+
+class ConfluencePageDeletionEntity(DeletionEntity):
+    """Deletion signal for a Confluence page moved to trash."""
+
+    deletes_entity_class = ConfluencePageEntity
+
+    page_key: str = AirweaveField(
+        ...,
+        description="Stable Airweave page key matching ConfluencePageEntity.entity_id.",
+        is_entity_id=True,
+    )
+    title: str = AirweaveField(
+        ...,
+        description="Best-effort page title for deletion traceability.",
+        is_name=True,
+        embeddable=True,
+    )
+    content_id: str = AirweaveField(
+        ...,
+        description="Confluence page ID that has been trashed.",
+        embeddable=False,
+    )
+    space_key: Optional[str] = AirweaveField(
+        None,
+        description="Confluence space key for the deleted page.",
+        embeddable=False,
     )
 
 

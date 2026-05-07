@@ -19,7 +19,7 @@ from tenacity import retry, stop_after_attempt
 from airweave.core.logging import ContextualLogger
 from airweave.core.shared_models import RateLimitLevel
 from airweave.domains.browse_tree.types import NodeSelectionData
-from airweave.domains.sources.exceptions import SourceAuthError
+from airweave.domains.sources.exceptions import SourceAuthError, SourceEntityNotFoundError
 from airweave.domains.sources.token_providers.protocol import AuthProviderKind, SourceAuthProvider
 from airweave.domains.storage import FileSkippedException
 from airweave.domains.storage.file_service import FileService
@@ -271,7 +271,19 @@ class ConfluenceSource(BaseSource):
             if not page_id:
                 continue
 
-            page_details = await self._fetch_page_detail(page_id)
+            try:
+                page_details = await self._fetch_page_detail(page_id)
+            except SourceEntityNotFoundError as e:
+                # Page was deleted or no longer accessible between listing and detail fetch.
+                # Log and continue without failing the entire sync.
+                self.logger.warning(
+                    "confluence: page detail 404 for space=%s id=%s: %s",
+                    space_entity.space_key,
+                    page_id,
+                    e,
+                )
+                continue
+
             page_entity = ConfluencePageEntity.from_api(
                 page_details,
                 breadcrumbs=[breadcrumb],
