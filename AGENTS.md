@@ -217,3 +217,6 @@ docker logs airweave-frontend
 # Stop services
 docker compose -f docker/docker-compose.yml down
 ```
+
+Frontend change not taking effect after code edits:
+- See `docs/debug/frontend-change-not-effective.md` for the quick rebuild/restart workflow and `frontend/dist` permission fix.

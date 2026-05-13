@@ -74,6 +74,10 @@ class CollectionMetadataBuilder:
             "An AI-powered knowledge base platform for creating, organizing, and "
             "publishing documentation for customers and internal teams."
         ),
+        "dingtalk": (
+            "DingTalk cloud documents and folders synced from configured entries "
+            "using app + fixed operator visibility context."
+        ),
         "dropbox": (
             "A cloud storage and file-sync service for storing, sharing, and accessing "
             "files across devices."
@@ -81,6 +85,10 @@ class CollectionMetadataBuilder:
         "fireflies": (
             "An AI meeting assistant that records, transcribes, and summarizes "
             "conversations from video calls."
+        ),
+        "feishu": (
+            "Feishu (Lark) cloud documents and knowledge content synced from a configured "
+            "Drive folder, including Docx document text and metadata."
         ),
         "freshdesk": (
             "An AI-powered customer support platform with ticketing, automation, and "

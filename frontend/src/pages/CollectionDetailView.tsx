@@ -374,61 +374,133 @@ const Collections = () => {
         }
     };
 
+    // After browser OAuth, backend defers Temporal until verify-oauth (claim token).
+    const oauthReturnHandledKey = useRef<string | null>(null);
+
+    useEffect(() => {
+        if (!isFromOAuthSuccess) {
+            oauthReturnHandledKey.current = null;
+        }
+    }, [isFromOAuthSuccess]);
+
     // ** Handle OAuth callback: verify claim token and trigger deferred sync **
     useEffect(() => {
-        if (!isFromOAuthSuccess) return;
+        if (!isFromOAuthSuccess || !readable_id) return;
 
         const newSourceId = searchParams.get("source_connection_id");
+        if (!newSourceId) return;
 
-        const handleOAuthReturn = async () => {
+        // One success navigation (status=success&source_connection_id=...) per URL
+        const dedupeKey = `${newSourceId}:${searchParams.toString()}`;
+        if (oauthReturnHandledKey.current === dedupeKey) return;
+        oauthReturnHandledKey.current = dedupeKey;
+
+        (async () => {
             let verifyFailed = false;
+            const storageKey = `oauth_claim_token:${newSourceId}`;
+            // Remove before POST so React Strict Mode / double effect cannot call verify twice
+            const claimToken = sessionStorage.getItem(storageKey);
+            if (claimToken) {
+                sessionStorage.removeItem(storageKey);
+            }
 
-            if (newSourceId) {
-                const claimToken = sessionStorage.getItem(`oauth_claim_token:${newSourceId}`);
-                if (claimToken) {
-                    try {
-                        const resp = await apiClient.post(
-                            `/source-connections/${newSourceId}/verify-oauth`,
-                            { claim_token: claimToken }
-                        );
-                        if (resp.ok) {
-                            sessionStorage.removeItem(`oauth_claim_token:${newSourceId}`);
-                        } else {
-                            console.error("verify-oauth failed:", resp.status);
-                            verifyFailed = true;
+            if (claimToken) {
+                try {
+                    const resp = await apiClient.post(
+                        `/source-connections/${newSourceId}/verify-oauth`,
+                        { claim_token: claimToken }
+                    );
+                    if (!resp.ok) {
+                        let detail: string = "";
+                        try {
+                            const errBody = await resp.json();
+                            if (errBody && typeof errBody.detail === "string") {
+                                detail = errBody.detail;
+                            } else if (errBody && typeof errBody.message === "string") {
+                                detail = errBody.message;
+                            }
+                        } catch {
+                            // ignore
                         }
-                    } catch (err) {
-                        console.error("Failed to verify OAuth flow:", err);
+                        sessionStorage.setItem(storageKey, claimToken);
                         verifyFailed = true;
+                        toast({
+                            title: "Connection could not be finalized",
+                            description: detail || `Request failed (HTTP ${resp.status}). Try \"Connect now\" again.`,
+                            variant: "destructive",
+                        });
                     }
-                }
-            }
-
-            if (collection?.readable_id) {
-                fetchSourceConnections(collection.readable_id);
-            }
-
-            if (!verifyFailed && newSourceId && sourceConnections.length > 0) {
-                const newConnection = sourceConnections.find(c => c.id === newSourceId);
-                if (newConnection) {
+                } catch (err) {
+                    sessionStorage.setItem(storageKey, claimToken);
+                    verifyFailed = true;
                     toast({
-                        title: "Success",
-                        description: `Source "${newConnection.name}" connected successfully!`
+                        title: "Connection could not be finalized",
+                        description: err instanceof Error ? err.message : String(err),
+                        variant: "destructive",
                     });
                 }
+            } else {
+                console.warn(
+                    "OAuth return: no claim token in sessionStorage; if sync never starts, re-open Connect from the source card."
+                );
+                oauthReturnHandledKey.current = null;
             }
 
-            if (!verifyFailed) {
+            // Always refresh from route (do not wait for `collection` state) so status updates
+            // even when this effect runs before the first /collections fetch finishes.
+            try {
+                const collResp = await apiClient.get(`/collections/${readable_id}`);
+                if (collResp.ok) {
+                    setCollection(await collResp.json());
+                }
+            } catch {
+                // non-fatal
+            }
+            await fetchSourceConnections(readable_id);
+
+            if (verifyFailed) {
+                oauthReturnHandledKey.current = null;
+            } else if (claimToken) {
+                toast({
+                    title: "Source connected",
+                    description: "Initial sync is starting. Documents will show up as they are indexed.",
+                });
                 const newSearchParams = new URLSearchParams(searchParams);
                 newSearchParams.delete("status");
                 newSearchParams.delete("source_connection_id");
                 newSearchParams.delete("collection");
                 setSearchParams(newSearchParams, { replace: true });
             }
-        };
+        })();
+        // fetchSourceConnections is intentionally omitted: it is not stable across renders
+        // and would retrigger this effect every paint.
+    }, [isFromOAuthSuccess, readable_id, searchParams, setSearchParams, toast]);
 
-        handleOAuthReturn();
-    }, [isFromOAuthSuccess, collection?.readable_id, searchParams, setSearchParams]);
+    // OAuth callback failed (backend 303 to collection with oauth_status=error&reason=...)
+    const oauthCallbackErrorHandledKey = useRef<string | null>(null);
+    useEffect(() => {
+        if (searchParams.get("oauth_status") !== "error") {
+            oauthCallbackErrorHandledKey.current = null;
+            return;
+        }
+        const dedupeKey = searchParams.toString();
+        if (oauthCallbackErrorHandledKey.current === dedupeKey) return;
+        oauthCallbackErrorHandledKey.current = dedupeKey;
+
+        const reasonRaw = searchParams.get("reason");
+        const reason =
+            reasonRaw && reasonRaw.trim().length > 0 ? reasonRaw.trim() : "OAuth callback failed";
+
+        toast({
+            title: "Connection could not be authorized",
+            description: reason,
+            variant: "destructive",
+        });
+        const next = new URLSearchParams(searchParams);
+        next.delete("oauth_status");
+        next.delete("reason");
+        setSearchParams(next, { replace: true });
+    }, [searchParams, setSearchParams, toast]);
 
     // ** NEW: Refresh connections when panel or creation modal closes, in case a new one was added **
     useEffect(() => {

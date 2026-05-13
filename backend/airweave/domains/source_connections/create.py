@@ -176,6 +176,7 @@ class SourceConnectionCreationService(SourceConnectionCreateServiceProtocol):
         *,
         id: UUID,
         ctx: ApiContext,
+        redirect_url: Optional[str] = None,
     ) -> SourceConnectionSchema:
         """Create a fresh OAuth session for an un-authenticated connection.
 
@@ -199,7 +200,7 @@ class SourceConnectionCreationService(SourceConnectionCreateServiceProtocol):
         byoc_consumer_key: Optional[str] = None
         byoc_consumer_secret: Optional[str] = None
         template_configs: Optional[dict[str, Any]] = None
-        redirect_url: Optional[str] = None
+        redirect_url_resolved: Optional[str] = None
         payload: Optional[dict[str, Any]] = None
         old_init = None
 
@@ -214,12 +215,14 @@ class SourceConnectionCreationService(SourceConnectionCreateServiceProtocol):
                 byoc_consumer_key = overrides.get("consumer_key")
                 byoc_consumer_secret = overrides.get("consumer_secret")
                 template_configs = overrides.get("template_configs")
-                redirect_url = overrides.get("redirect_url")
+                redirect_url_resolved = overrides.get("redirect_url")
                 payload = old_init.payload
 
-        # Use stored redirect_url (Connect integrators) or default to collection page
-        if not redirect_url:
-            redirect_url = _default_redirect_url(source_conn.readable_collection_id)
+        # Prefer the browser-provided return URL (same origin as the user) over server defaults.
+        if redirect_url and str(redirect_url).strip():
+            redirect_url_resolved = str(redirect_url).strip()
+        elif not redirect_url_resolved:
+            redirect_url_resolved = _default_redirect_url(source_conn.readable_collection_id)
 
         # Fall back: reconstruct payload from source_conn fields
         if payload is None:
@@ -287,7 +290,7 @@ class SourceConnectionCreationService(SourceConnectionCreateServiceProtocol):
                 client_id=initiation_result.client_id,
                 client_secret=initiation_result.client_secret,
                 oauth_client_mode=initiation_result.oauth_client_mode,
-                redirect_url=redirect_url,
+                redirect_url=redirect_url_resolved,
                 template_configs=template_configs,
                 additional_overrides=initiation_result.additional_overrides,
                 initiator_user_id=initiator_user_id,

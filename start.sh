@@ -140,6 +140,37 @@ run_with_timeout() {
     fi
 }
 
+ensure_frontend_dist_writable() {
+    local frontend_dist="frontend/dist"
+
+    # No dist yet: nothing to fix.
+    if [[ ! -d $frontend_dist ]]; then
+        return 0
+    fi
+
+    # Fast path: already writable by current user.
+    if [[ -w $frontend_dist ]]; then
+        log_debug "frontend/dist is writable"
+        return 0
+    fi
+
+    log_note "Detected non-writable frontend/dist; attempting permission repair..."
+
+    # Prefer repairing through the running frontend container (has root access).
+    if $CONTAINER_CMD ps --format '{{.Names}}' | grep -qx "airweave-frontend"; then
+        if $CONTAINER_CMD exec -u 0 airweave-frontend sh -c "chown -R $(id -u):$(id -g) /app/dist" >/dev/null 2>&1; then
+            if [[ -w $frontend_dist ]]; then
+                log_success "Repaired frontend/dist ownership"
+                return 0
+            fi
+        fi
+    fi
+
+    log_warning "Could not auto-fix frontend/dist permissions. Frontend rebuild may fail."
+    log_info "Manual fix: docker exec -u 0 airweave-frontend sh -c 'chown -R $(id -u):$(id -g) /app/dist'"
+    return 0
+}
+
 get_env_value() {
     local key=$1
     # Note: Use || true to prevent pipefail from causing exit when key doesn't exist
@@ -460,6 +491,7 @@ if [[ -n $ACTION_RESTART ]]; then
     log_info "Restarting services..."
     $COMPOSE_CMD --env-file .env -f "$COMPOSE_FILE" restart
     log_success "Services restarted"
+    ensure_frontend_dist_writable
 
     # Skip container creation and env setup, but still do health checks
     SKIP_CONTAINER_CREATION=1

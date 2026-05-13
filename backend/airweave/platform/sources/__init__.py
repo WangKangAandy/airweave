@@ -13,9 +13,11 @@ from .confluence import ConfluenceSource
 from .ctti import CTTISource
 from .document360 import Document360Source
 from .dropbox import DropboxSource
+from .dingtalk_docs import DingtalkSource
 from .enron import EnronSource
 from .exception_stub import ExceptionStubSource
 from .file_stub import FileStubSource
+from .feishu import FeishuSource
 from .fireflies import FirefliesSource
 from .freshdesk import FreshdeskSource
 from .github import GitHubSource
@@ -81,10 +83,12 @@ ALL_SOURCES: list[type] = [
     ConfluenceSource,
     CTTISource,
     Document360Source,
+    DingtalkSource,
     DropboxSource,
     EnronSource,
     ExceptionStubSource,
     FileStubSource,
+    FeishuSource,
     FirefliesSource,
     FreshdeskSource,
     GitHubSource,

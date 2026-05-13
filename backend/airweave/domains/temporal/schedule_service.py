@@ -56,6 +56,13 @@ SYNC_ID_SEARCH_ATTRIBUTE = SearchAttributeKey.for_keyword("SyncId")
 
 _MINUTE_LEVEL_RE = re.compile(r"^(\*/([1-5]?\d)|([0-5]?\d)) \* \* \* \*$")
 
+# Source-level default companion full-sync cadence (days) for minute schedules.
+# This is an extension point - additional sources can be added without changing
+# source connector logic.
+SOURCE_DEFAULT_COMPANION_INTERVAL_DAYS: dict[str, int] = {
+    "confluence": 2,
+}
+
 
 @dataclass(frozen=True)
 class ScheduleTypeSpec:
@@ -329,11 +336,18 @@ class TemporalScheduleService(TemporalScheduleServiceProtocol):
         return sync_dict, collection_dict, connection_dict
 
     @staticmethod
-    def _schedule_specs_for_cron(cron_schedule: str) -> list[ScheduleTypeSpec]:
+    def _schedule_specs_for_cron(
+        cron_schedule: str,
+        *,
+        cleanup_cron_override: Optional[str] = None,
+        cleanup_interval_days: Optional[int] = None,
+    ) -> list[ScheduleTypeSpec]:
         """Return all schedule specs required for a cron pattern.
 
         Minute-level crons produce incremental syncs that skip orphan cleanup.
-        A daily forced-full-sync companion ensures orphans are cleaned up.
+        A forced-full-sync companion schedule ensures orphans are cleaned up.
+        Companion cadence can be provided explicitly (cron override) or as an
+        interval in days.
         Regular crons do full traversals each run — cleanup happens naturally.
         """
         match = _MINUTE_LEVEL_RE.match(cron_schedule)
@@ -341,16 +355,44 @@ class TemporalScheduleService(TemporalScheduleServiceProtocol):
 
         if is_minute:
             now = datetime.now(timezone.utc)
-            daily_cleanup_cron = f"{now.minute} {(now.hour + 12) % 24} * * *"
+            if cleanup_cron_override:
+                cleanup_cron = cleanup_cron_override
+            elif cleanup_interval_days and cleanup_interval_days > 1:
+                cleanup_cron = f"{now.minute} {(now.hour + 12) % 24} */{cleanup_interval_days} * *"
+            else:
+                cleanup_cron = f"{now.minute} {(now.hour + 12) % 24} * * *"
             return [
                 ScheduleTypeSpec(schedule_type="minute"),
                 ScheduleTypeSpec(
                     schedule_type="cleanup",
                     force_full_sync=True,
-                    cron_override=daily_cleanup_cron,
+                    cron_override=cleanup_cron,
                 ),
             ]
         return [ScheduleTypeSpec(schedule_type="regular")]
+
+    @staticmethod
+    def _extract_companion_cleanup_config(
+        sync_metadata: Optional[dict],
+    ) -> tuple[Optional[str], Optional[int]]:
+        """Extract optional companion full-sync config from sync metadata."""
+        if not isinstance(sync_metadata, dict):
+            return None, None
+
+        minute_cfg = sync_metadata.get("minute_level_schedule")
+        if not isinstance(minute_cfg, dict):
+            return None, None
+
+        companion_cfg = minute_cfg.get("companion_full_sync")
+        if not isinstance(companion_cfg, dict):
+            return None, None
+
+        cron_override = companion_cfg.get("cron")
+        interval_days = companion_cfg.get("interval_days")
+        interval_int = None
+        if isinstance(interval_days, int) and interval_days > 0:
+            interval_int = interval_days
+        return cron_override, interval_int
 
     # ------------------------------------------------------------------
     # Public API (protocol surface)
@@ -400,7 +442,18 @@ class TemporalScheduleService(TemporalScheduleServiceProtocol):
             connection_id=connection_id,
         )
 
-        specs = self._schedule_specs_for_cron(cron_schedule)
+        cleanup_cron_override, cleanup_interval_days = self._extract_companion_cleanup_config(
+            sync_dict.get("sync_metadata")
+        )
+        source_short_name = (connection_dict.get("short_name") or "").lower()
+        if cleanup_interval_days is None:
+            cleanup_interval_days = SOURCE_DEFAULT_COMPANION_INTERVAL_DAYS.get(source_short_name)
+
+        specs = self._schedule_specs_for_cron(
+            cron_schedule,
+            cleanup_cron_override=cleanup_cron_override,
+            cleanup_interval_days=cleanup_interval_days,
+        )
         primary_schedule_id: str = ""
 
         for i, spec in enumerate(specs):

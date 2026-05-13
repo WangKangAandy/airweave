@@ -13,6 +13,7 @@ import { ExternalLink, Loader2 } from "lucide-react";
 import { useSidePanelStore } from "@/lib/stores/sidePanelStore";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
+import { parseFeishuEntries } from "./source-config-extensions/feishu";
 
 interface SourceConfigViewProps {
     context: {
@@ -50,6 +51,11 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ context }) =
 
     const { authProviderConnections, isLoadingConnections, fetchAuthProviderConnections } = useAuthProvidersStore();
 
+    const feishuRealtimeValidation =
+        sourceShortName === 'feishu'
+            ? parseFeishuEntries(String(configValues.folder_token || ''))
+            : null;
+
 
     const isTokenField = (fieldName: string): boolean => {
         const lowerName = fieldName.toLowerCase();
@@ -79,7 +85,12 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ context }) =
                     if (data.config_fields?.fields) {
                         const initialConfig: Record<string, any> = {};
                         data.config_fields.fields.forEach((field: any) => {
-                            if (field.name) initialConfig[field.name] = '';
+                            if (!field.name) return;
+                            if (field.type === 'boolean') {
+                                initialConfig[field.name] = false;
+                            } else {
+                                initialConfig[field.name] = '';
+                            }
                         });
                         setConfigValues(initialConfig);
                     }
@@ -112,12 +123,34 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ context }) =
     const handleInitiateConnection = async () => {
         setSubmitting(true);
 
+        const normalizedConfigValues = { ...configValues };
+        if (sourceShortName === 'feishu') {
+            const rawFeishuInput = String(configValues.folder_token || '').trim();
+            const result = parseFeishuEntries(rawFeishuInput);
+            if (result.accepted.length === 0) {
+                toast.error("Please provide at least one valid Feishu link/token.");
+                setSubmitting(false);
+                return;
+            }
+            if (result.invalid.length > 0) {
+                toast.error(
+                    `Feishu links validation failed: ${result.accepted.length} accepted, ${result.invalid.length} invalid.`
+                );
+                setSubmitting(false);
+                return;
+            }
+            normalizedConfigValues.folder_token = result.normalized;
+            toast.success(`Feishu links validated: ${result.accepted.length} accepted, 0 invalid.`);
+        }
+
         // Base payload
         const payload: any = {
             name: `${sourceName} Connection`,
             short_name: sourceShortName,
             collection: collectionId,
-            config_fields: Object.fromEntries(Object.entries(configValues).filter(([_, v]) => v !== '')),
+            config_fields: Object.fromEntries(
+                Object.entries(normalizedConfigValues).filter(([_, v]) => v !== '')
+            ),
             sync_immediately: true,
         };
 
@@ -226,13 +259,55 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ context }) =
                                         placeholder={`Enter ${field.title?.toLowerCase() || field.name} and press Enter...`}
                                         transformInput={sourceDetails?.short_name === 'jira' && field.name === 'project_keys' ? (v) => v.toUpperCase() : undefined}
                                     />
+                                ) : field.type === 'boolean' ? (
+                                    <div className="flex items-center gap-2 mt-1">
+                                        <Switch
+                                            checked={Boolean(configValues[field.name])}
+                                            onCheckedChange={(checked) => {
+                                                setConfigValues((prev) => ({ ...prev, [field.name]: checked }));
+                                            }}
+                                        />
+                                        <span className="text-xs text-muted-foreground">{configValues[field.name] ? 'On' : 'Off'}</span>
+                                    </div>
                                 ) : (
-                                    <input
-                                        type="text"
-                                        value={configValues[field.name] || ''}
-                                        onChange={(e) => handleFieldChange(setConfigValues)(field.name, e.target.value)}
-                                        className={cn("w-full p-2 mt-1 rounded border", isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-300")}
-                                    />
+                                    <>
+                                        <input
+                                            type={field.type === 'number' || field.type === 'integer' ? 'number' : 'text'}
+                                            value={
+                                                configValues[field.name] === undefined || configValues[field.name] === null
+                                                    ? ''
+                                                    : String(configValues[field.name])
+                                            }
+                                            onChange={(e) => {
+                                                const raw = e.target.value;
+                                                const v =
+                                                    field.type === 'number' || field.type === 'integer'
+                                                        ? (raw === '' ? '' : Number(raw))
+                                                        : raw;
+                                                setConfigValues((prev) => ({ ...prev, [field.name]: v }));
+                                            }}
+                                            className={cn("w-full p-2 mt-1 rounded border", isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-300")}
+                                        />
+                                        {sourceShortName === 'feishu' &&
+                                            field.name === 'folder_token' &&
+                                            String(configValues.folder_token || '').trim() &&
+                                            feishuRealtimeValidation && (
+                                                <div className="mt-1 space-y-1">
+                                                    <p className="text-xs text-muted-foreground">
+                                                        Validation: {feishuRealtimeValidation.accepted.length} accepted,{" "}
+                                                        {feishuRealtimeValidation.invalid.length} invalid
+                                                    </p>
+                                                    {feishuRealtimeValidation.invalid.length > 0 && (
+                                                        <p className="text-xs text-red-500">
+                                                            Invalid: {feishuRealtimeValidation.invalid.slice(0, 3).join(', ')}
+                                                            {feishuRealtimeValidation.invalid.length > 3
+                                                                ? ` (+${feishuRealtimeValidation.invalid.length - 3} more)`
+                                                                : ''}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            )}
+                                    </>
                                 )}
                             </div>
                         ))}

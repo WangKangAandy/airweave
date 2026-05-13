@@ -421,10 +421,16 @@ class CodaAuthConfig(APIKeyAuthConfig):
     )
 
 
-class ConfluenceAuthConfig(OAuth2WithRefreshAuthConfig):
-    """Confluence authentication credentials schema."""
+class ConfluenceAuthConfig(APIKeyAuthConfig):
+    """Confluence authentication credentials schema (site PAT)."""
 
-    # Inherits refresh_token and access_token from OAuth2WithRefreshAuthConfig
+    api_key: str = Field(
+        title="Personal Access Token",
+        description=(
+            "Confluence Personal Access Token (PAT) used as Bearer token for /rest/api calls."
+        ),
+        min_length=8,
+    )
 
 
 class Document360AuthConfig(AuthConfig):
@@ -553,10 +559,26 @@ class GoogleSlidesAuthConfig(OAuth2BYOCAuthConfig):
     # Inherits client_id, client_secret, refresh_token and access_token from OAuth2BYOCAuthConfig
 
 
-class GitLabAuthConfig(OAuth2WithRefreshAuthConfig):
-    """GitLab authentication credentials schema."""
+class GitLabPatAuthConfig(AuthConfig):
+    """GitLab PAT authentication credentials schema."""
 
-    # Inherits refresh_token and access_token from OAuth2WithRefreshAuthConfig
+    personal_access_token: str = Field(
+        title="Personal Access Token",
+        description="GitLab PAT (for example glpat-...) with read_api/read_repository scopes",
+        min_length=8,
+    )
+
+    @field_validator("personal_access_token")
+    @classmethod
+    def validate_personal_access_token(cls, v: str) -> str:
+        """Validate GitLab personal access token format."""
+        if not v or not v.strip():
+            raise ValueError("Personal access token is required")
+        token = v.strip()
+        # Modern GitLab PAT format starts with glpat-. Keep fallback leniency for older tokens.
+        if token.startswith("glpat-") or len(token) >= 20:
+            return token
+        raise ValueError("Invalid GitLab token format. Expected glpat-... or a valid PAT token")
 
 
 class HubspotAuthConfig(OAuth2WithRefreshAuthConfig):
@@ -914,6 +936,44 @@ class FreshdeskAuthConfig(AuthConfig):
         description="Your Freshdesk API key. Find it in Profile Settings in your Freshdesk portal.",
         min_length=1,
     )
+
+
+class FeishuAuthConfig(AuthConfig):
+    """Feishu authentication credentials schema.
+
+    Uses app_id + app_secret to exchange tenant_access_token via:
+    /open-apis/auth/v3/tenant_access_token/internal
+    """
+
+    app_id: str = Field(
+        title="App ID",
+        description="Feishu app_id from your Feishu Open Platform app.",
+        min_length=5,
+    )
+    app_secret: str = Field(
+        title="App Secret",
+        description="Feishu app_secret from your Feishu Open Platform app.",
+        min_length=10,
+    )
+
+
+class DingtalkAuthConfig(AuthConfig):
+    """DingTalk authentication credentials schema (internal app key/secret)."""
+
+    app_key: str = Field(
+        title="App Key",
+        description="DingTalk internal app AppKey.",
+        min_length=5,
+    )
+    app_secret: str = Field(
+        title="App Secret",
+        description="DingTalk internal app AppSecret.",
+        min_length=10,
+    )
+
+
+# Backward-compatible alias for existing imports.
+DingTalkAuthConfig = DingtalkAuthConfig
 
 
 class TodoistAuthConfig(OAuth2AuthConfig):

@@ -333,6 +333,16 @@ class OAuthFlowServiceProtocol(Protocol):
 class OAuthCallbackServiceProtocol(Protocol):
     """Completes browser-based OAuth callback flows end-to-end."""
 
+    async def resolve_oauth_error_redirect_base(
+        self,
+        db: AsyncSession,
+        *,
+        state: Optional[str] = None,
+        oauth_token: Optional[str] = None,
+    ) -> Optional[str]:
+        """Best-effort SPA URL for OAuth callback errors (from init session)."""
+        ...
+
     async def complete_oauth_callback(
         self,
         db: AsyncSession,

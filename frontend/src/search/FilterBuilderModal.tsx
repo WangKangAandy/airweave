@@ -13,10 +13,11 @@ import { Plus, X, Copy, Check } from "lucide-react";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { materialOceanic, oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { DESIGN_SYSTEM } from "@/lib/design-system";
+import { generateUuid } from "@/lib/utils/uuid";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const uid = () => crypto.randomUUID();
+const uid = () => generateUuid();
 
 // ─── Field & Operator definitions (mirror backend enums) ──────────────────────
 

@@ -16,7 +16,8 @@ from typing import List, Optional
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 from uuid import UUID
 
-from fastapi import Depends, Path, Query, Response
+from fastapi import Body, Depends, HTTPException, Path, Query, Response
+from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import schemas
@@ -25,9 +26,11 @@ from airweave.api.context import ApiContext
 from airweave.api.deps import Inject
 from airweave.api.router import TrailingSlashRouter
 from airweave.core.config import settings
+from airweave.core.exceptions import NotFoundException
 from airweave.core.events.source_connection import SourceConnectionLifecycleEvent
 from airweave.core.protocols import EventBus
 from airweave.db.session import get_db
+from airweave.domains.oauth.browser_redirect import post_oauth_browser_return_url
 from airweave.domains.oauth.protocols import OAuthCallbackServiceProtocol
 from airweave.domains.source_connections.protocols import SourceConnectionServiceProtocol
 from airweave.domains.usage.protocols import UsageLimitCheckerProtocol
@@ -45,6 +48,29 @@ logger = logging.getLogger(__name__)
 router = TrailingSlashRouter()
 
 
+def _oauth_app_error_response(reason: str, *, redirect_base: Optional[str] = None) -> Response:
+    """303 redirect to the web app with oauth_status=error (for browser-top-level GETs).
+
+    When ``redirect_base`` is set (from OAuth init session), send the user back to that
+    SPA URL (e.g. collection detail) instead of the app root so transient callback
+    failures do not strand them on the dashboard.
+    """
+    err_msg = reason if isinstance(reason, str) else "error"
+    if len(err_msg) > 300:
+        err_msg = err_msg[:300] + "…"
+    app = settings.app_url or "http://localhost:8080"
+    target = (redirect_base or "").strip() or app
+    p = urlparse(target)
+    if not p.scheme or not p.netloc:
+        p = urlparse(app)
+    q = parse_qs(p.query, keep_blank_values=True)
+    q["oauth_status"] = ["error"]
+    q["reason"] = [err_msg]
+    new_q = urlencode(q, doseq=True)
+    location = urlunparse((p.scheme, p.netloc, p.path, p.params, new_q, p.fragment))
+    return Response(status_code=303, headers={"Location": location})
+
+
 # OAuth callback endpoints
 @router.get("/callback")
 async def oauth_callback(
@@ -54,6 +80,11 @@ async def oauth_callback(
     # OAuth2 parameters
     state: Optional[str] = Query(None, description="OAuth2 state parameter"),
     code: Optional[str] = Query(None, description="OAuth2 authorization code"),
+    auth_code: Optional[str] = Query(
+        None,
+        alias="authCode",
+        description="DingTalk OAuth2 authorization code (same as code)",
+    ),
     # OAuth1 parameters
     oauth_token: Optional[str] = Query(None, description="OAuth1 token parameter"),
     oauth_verifier: Optional[str] = Query(None, description="OAuth1 verifier"),
@@ -68,20 +99,52 @@ async def oauth_callback(
     This endpoint does not require authentication as it's accessed by users
     who are connecting their source.
     """
-    source_conn = await oauth_callback_svc.complete_oauth_callback(
-        db,
-        state=state,
-        code=code,
-        oauth_token=oauth_token,
-        oauth_verifier=oauth_verifier,
+    oauth2_code = code or auth_code
+    try:
+        source_conn = await oauth_callback_svc.complete_oauth_callback(
+            db,
+            state=state,
+            code=oauth2_code,
+            oauth_token=oauth_token,
+            oauth_verifier=oauth_verifier,
+        )
+    except HTTPException as exc:
+        # Browsers follow this route via top-level GET; redirect to the app with an error hint
+        # so users are not left on a broken connection (ERR_INVALID_HTTP_RESPONSE).
+        err_msg = exc.detail if isinstance(exc.detail, str) else "oauth_callback_failed"
+        logger.warning(
+            "OAuth callback HTTPException: status=%s detail=%s state=%s has_code=%s "
+            "has_auth_code=%s has_oauth_token=%s",
+            exc.status_code,
+            err_msg,
+            state,
+            bool(code),
+            bool(auth_code),
+            bool(oauth_token),
+        )
+        err_base = await oauth_callback_svc.resolve_oauth_error_redirect_base(
+            db, state=state, oauth_token=oauth_token
+        )
+        return _oauth_app_error_response(err_msg, redirect_base=err_base)
+    except Exception:
+        logger.exception("OAuth callback failed with unexpected error")
+        err_base = await oauth_callback_svc.resolve_oauth_error_redirect_base(
+            db, state=state, oauth_token=oauth_token
+        )
+        return _oauth_app_error_response("unexpected_error", redirect_base=err_base)
+
+    redirect_url = post_oauth_browser_return_url(
+        source_conn.auth.redirect_url,
+        readable_collection_id=source_conn.readable_collection_id,
     )
 
-    redirect_url = source_conn.auth.redirect_url
-
-    if not redirect_url:
-        redirect_url = settings.app_url
-
     parsed = urlparse(redirect_url)
+    if not parsed.scheme or not parsed.netloc:
+        redirect_url = post_oauth_browser_return_url(
+            None,
+            readable_collection_id=source_conn.readable_collection_id,
+        )
+        parsed = urlparse(redirect_url)
     query_params = parse_qs(parsed.query, keep_blank_values=True)
 
     query_params["status"] = ["success"]
@@ -96,6 +159,37 @@ async def oauth_callback(
         status_code=303,
         headers={"Location": final_url},
     )
+
+
+
+
+@router.get("/authorize/{code}")
+async def authorize_redirect(
+    *,
+    db: AsyncSession = Depends(get_db),
+    code: str,
+    source_connection_service: SourceConnectionServiceProtocol = Inject(
+        SourceConnectionServiceProtocol
+    ),
+) -> Response:
+    """Proxy redirect to OAuth provider (short link -> 303 to real authorize URL).
+
+    Registered before `/{source_connection_id}` so routing is unambiguous. Uses
+    :class:`RedirectResponse` to emit a valid ``Location`` header.
+    """
+    try:
+        final_url = await source_connection_service.get_redirect_url(db, code=code)
+    except NotFoundException as exc:
+        return _oauth_app_error_response(str(exc))
+    except Exception:
+        logger.exception("Authorize redirect failed (code=%s)", code)
+        return _oauth_app_error_response("unexpected_error")
+
+    safe = final_url.strip()
+    if not safe or "\r" in safe or "\n" in safe:
+        logger.error("Invalid OAuth proxy target: malformed or empty URL")
+        return _oauth_app_error_response("invalid_oauth_redirect")
+    return RedirectResponse(url=safe, status_code=303)
 
 
 @router.post(
@@ -149,11 +243,14 @@ async def reinitiate_oauth(
     *,
     db: AsyncSession = Depends(get_db),
     source_connection_id: UUID = Path(...),
+    body: schemas.ReinitiateOAuthRequest = Body(default_factory=schemas.ReinitiateOAuthRequest),
     ctx: ApiContext = Depends(deps.get_context),
     sc_service: SourceConnectionServiceProtocol = Inject(SourceConnectionServiceProtocol),
 ) -> schemas.SourceConnection:
     """Create a fresh OAuth session for an un-authenticated connection."""
-    return await sc_service.reinitiate_oauth(db, id=source_connection_id, ctx=ctx)
+    return await sc_service.reinitiate_oauth(
+        db, id=source_connection_id, ctx=ctx, redirect_url=body.redirect_url
+    )
 
 
 @router.post(
@@ -580,26 +677,3 @@ async def get_sync_id(
     Used internally for Temporal sync testing and debugging.
     """
     return await source_connection_service.get_sync_id(db, id=source_connection_id, ctx=ctx)
-
-
-@router.get("/authorize/{code}")
-async def authorize_redirect(
-    *,
-    db: AsyncSession = Depends(get_db),
-    code: str,
-    source_connection_service: SourceConnectionServiceProtocol = Inject(
-        SourceConnectionServiceProtocol
-    ),
-) -> Response:
-    """Proxy redirect to OAuth provider.
-
-    This endpoint is used to provide a short-lived, user-friendly URL
-    that redirects to the actual OAuth provider authorization page.
-    This endpoint does not require authentication as it's accessed by users
-    who are not yet authenticated with the platform.
-    """
-    final_url = await source_connection_service.get_redirect_url(db, code=code)
-    return Response(
-        status_code=303,
-        headers={"Location": final_url},
-    )

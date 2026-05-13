@@ -10,6 +10,7 @@ import pytest
 from fastapi import HTTPException
 
 from airweave.adapters.event_bus.fake import FakeEventBus
+from airweave.adapters.llm.exceptions import LLMFatalError
 from airweave.adapters.llm.fakes import FakeLLM
 from airweave.adapters.reranker.fakes.reranker import FakeReranker
 from airweave.api.context import ApiContext
@@ -190,6 +191,34 @@ class TestClassicSearchService:
         assert isinstance(event, SearchFailedEvent)
         assert "db down" in event.message
         assert event.tier.value == "classic"
+
+    @pytest.mark.asyncio
+    async def test_llm_fatal_error_falls_back_to_plain_plan(self) -> None:
+        """LLM fatal errors should fallback to plain retrieval instead of 500."""
+        svc, llm, executor, repo, bus = _make_service()
+
+        col = _make_collection()
+        repo.seed_readable(DEFAULT_READABLE_ID, col)
+
+        llm.seed_error(
+            LLMFatalError("model not found", provider="OpenAILLM"),
+            target="structured_output",
+        )
+        result = make_result(entity_id="ent-1", name="Result 1")
+        executor.seed_result(SearchResults(results=[result]))
+
+        request = _make_request(query="python")
+        results = await svc.search(AsyncMock(), _make_ctx(), DEFAULT_READABLE_ID, request)
+
+        assert len(results.results) == 1
+        assert len(executor._calls) == 1
+        _, plan, _, _ = executor._calls[0]
+        assert plan.query.primary == "python"
+        assert plan.retrieval_strategy == RetrievalStrategy.HYBRID
+
+        # Fallback should still be a successful search path.
+        event = bus.assert_published("search.completed")
+        assert isinstance(event, SearchCompletedEvent)
 
     @pytest.mark.asyncio
     async def test_collection_not_found_raises_404(self) -> None:

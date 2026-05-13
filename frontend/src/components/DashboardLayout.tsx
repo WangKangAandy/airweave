@@ -61,10 +61,21 @@ const CollectionsSection = memo(() => {
 
   // Initialize collections and event listeners
   useEffect(() => {
-    fetchCollections();
-    fetchCollectionsCount();
+    let cancelled = false;
+    const initializeCollections = async () => {
+      // Avoid showing a hard failure during backend warm-up window.
+      await apiClient.waitUntilReady({ timeoutMs: 5000, intervalMs: 300 });
+      if (cancelled) return;
+      fetchCollections();
+      fetchCollectionsCount();
+    };
+
+    initializeCollections();
     const unsubscribe = useCollectionsStore.getState().subscribeToEvents();
-    return unsubscribe;
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
   }, [fetchCollections, fetchCollectionsCount]);
 
   // Active status for nav items

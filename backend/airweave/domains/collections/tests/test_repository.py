@@ -140,6 +140,16 @@ class TestComputeCollectionStatus:
         ]
         assert CollectionRepository._compute_collection_status(conns) == CollectionStatus.ACTIVE
 
+    def test_pending_sync_returns_active(self):
+        conns = [
+            {
+                "is_authenticated": True,
+                "federated_search": False,
+                "last_job": {"status": "pending"},
+            }
+        ]
+        assert CollectionRepository._compute_collection_status(conns) == CollectionStatus.ACTIVE
+
     def test_all_failed_returns_error(self):
         conns = [
             {

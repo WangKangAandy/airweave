@@ -6,7 +6,9 @@ of cursor data for a specific source connector.
 
 from ._base import BaseCursor
 from .calcom import CalComCursor
+from .confluence import ConfluenceCursor
 from .ctti import CTTICursor
+from .feishu import FeishuCursor
 from .github import GitHubCursor
 from .gmail import GmailCursor
 from .google_docs import GoogleDocsCursor
@@ -21,7 +23,9 @@ from .sharepoint_online import SharePointOnlineCursor
 __all__ = [
     "BaseCursor",
     "CalComCursor",
+    "ConfluenceCursor",
     "CTTICursor",
+    "FeishuCursor",
     "GmailCursor",
     "GoogleDriveCursor",
     "GoogleDocsCursor",

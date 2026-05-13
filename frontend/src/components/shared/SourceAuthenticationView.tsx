@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { toast } from 'sonner';
-import { Copy, ArrowRight, Loader2, Settings, RefreshCw } from 'lucide-react';
+import { Copy, ArrowRight, Loader2, Settings, RefreshCw, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/lib/theme-provider';
 import { getAppIconUrl } from '@/lib/utils/icons';
@@ -16,6 +16,7 @@ interface SourceAuthenticationViewProps {
   sourceName: string;
   sourceShortName?: string; // Added for icon display
   authenticationUrl?: string;
+  onConnect?: () => Promise<void> | void;
   onRefreshUrl?: () => void;
   isRefreshing?: boolean;
   showBorder?: boolean; // Optional border for collection detail view
@@ -26,6 +27,7 @@ export const SourceAuthenticationView: React.FC<SourceAuthenticationViewProps> =
   sourceName,
   sourceShortName,
   authenticationUrl,
+  onConnect,
   onRefreshUrl,
   isRefreshing = false,
   showBorder = false,
@@ -35,6 +37,7 @@ export const SourceAuthenticationView: React.FC<SourceAuthenticationViewProps> =
   const isDark = resolvedTheme === 'dark';
   const [copied, setCopied] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const copyToClipboard = () => {
     if (authenticationUrl) {
@@ -45,13 +48,40 @@ export const SourceAuthenticationView: React.FC<SourceAuthenticationViewProps> =
     }
   };
 
-  const handleConnect = () => {
-    if (authenticationUrl) {
-      setIsConnecting(true);
+  const handleConnect = async () => {
+    if (isConnecting) return;
+    if (!onConnect && !authenticationUrl) return;
+
+    setIsConnecting(true);
+    try {
+      if (onConnect) {
+        await onConnect();
+        return;
+      }
+
       // Small delay for visual feedback before navigation
       setTimeout(() => {
-        window.location.href = authenticationUrl;
+        window.location.href = authenticationUrl as string;
       }, 100);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to start authorization");
+    } finally {
+      setIsConnecting(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!onDelete || isDeleting) return;
+    const confirmed = window.confirm(
+      "Delete this source connection?\n\nThis removes the failed connection so you can recreate it cleanly."
+    );
+    if (!confirmed) return;
+
+    setIsDeleting(true);
+    try {
+      await onDelete();
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -256,14 +286,14 @@ export const SourceAuthenticationView: React.FC<SourceAuthenticationViewProps> =
                   <TooltipTrigger asChild>
                     <button
                       onClick={handleConnect}
-                      disabled={isConnecting || !authenticationUrl}
+                      disabled={isConnecting || (!onConnect && !authenticationUrl)}
                       className={cn(
                         "inline-flex items-center gap-2",
                         "px-4 py-2 rounded-lg",
                         "text-sm font-medium",
                         "transition-all whitespace-nowrap",
 
-                        isConnecting || !authenticationUrl
+                        isConnecting || (!onConnect && !authenticationUrl)
                           ? "bg-muted text-muted-foreground cursor-not-allowed"
                           : "bg-primary text-primary-foreground hover:bg-primary/90"
                       )}
@@ -297,6 +327,32 @@ export const SourceAuthenticationView: React.FC<SourceAuthenticationViewProps> =
                 </Tooltip>
               </TooltipProvider>
             </div>
+
+            {/* Utility action for failed/pending OAuth connections */}
+            {onDelete && (
+              <div className="flex justify-start">
+                <button
+                  onClick={handleDelete}
+                  disabled={isDeleting}
+                  className={cn(
+                    "inline-flex items-center gap-2 text-xs font-medium",
+                    "px-3 py-1.5 rounded-md border transition-all",
+                    isDeleting
+                      ? "opacity-50 cursor-not-allowed"
+                      : isDark
+                        ? "border-red-900/60 text-red-400 hover:bg-red-900/20"
+                        : "border-red-200 text-red-600 hover:bg-red-50"
+                  )}
+                >
+                  {isDeleting ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-3.5 w-3.5" />
+                  )}
+                  <span>{isDeleting ? 'Deleting...' : 'Delete connection'}</span>
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Connection Visual - Between Connect directly and bottom */}

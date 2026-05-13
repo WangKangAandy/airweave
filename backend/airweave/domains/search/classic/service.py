@@ -16,6 +16,7 @@ from uuid import UUID
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from airweave.adapters.llm.exceptions import LLMFatalError
 from airweave.api.context import ApiContext
 from airweave.core.events.search import SearchCompletedEvent, SearchFailedEvent, SearchTier
 from airweave.core.protocols.event_bus import EventBus
@@ -30,6 +31,7 @@ from airweave.domains.search.protocols import (
     SearchPlanExecutorProtocol,
 )
 from airweave.domains.search.types import SearchPlan, SearchResults
+from airweave.domains.search.types.plan import RetrievalStrategy, SearchQuery
 from airweave.domains.search.types.filters import format_filter_groups_md
 
 if TYPE_CHECKING:
@@ -61,6 +63,16 @@ class ClassicSearchService(ClassicSearchServiceProtocol):
         self._collection_repo = collection_repo
         self._metadata_builder = metadata_builder
         self._event_bus = event_bus
+
+    def _build_llm_fallback_plan(self, request: ClassicSearchRequest) -> SearchPlan:
+        """Build a safe no-LLM fallback plan when LLM strategy generation fails fatally."""
+        return SearchPlan(
+            query=SearchQuery(primary=request.query, variations=[]),
+            retrieval_strategy=RetrievalStrategy.HYBRID,
+            filter_groups=request.filter or [],
+            limit=request.limit,
+            offset=request.offset,
+        )
 
     async def search(
         self,
@@ -124,30 +136,37 @@ class ClassicSearchService(ClassicSearchServiceProtocol):
         # 3. LLM generates strategy (no limit/offset — those come from the request)
         user_filter_md = format_filter_groups_md(request.filter) if request.filter else "None"
         prompt = f"User query: {request.query}\nUser filter: {user_filter_md}"
-        strategy = await self._llm.structured_output(prompt, ClassicSearchStrategy, system_prompt)
-        ctx.logger.debug(
-            f"Classic search LLM strategy primary={strategy.query.primary!r} "
-            f"retrieval={strategy.retrieval_strategy} "
-            f"filter_groups={len(strategy.filter_groups or [])}"
-        )
-
-        # Guard: if LLM returned an empty or non-word primary query, fall back to the
-        # user's original. LLMs sometimes return "", ".", or punctuation-only strings.
-        if not strategy.query.primary or not any(c.isalnum() for c in strategy.query.primary):
-            ctx.logger.warning(
-                f"Classic search LLM returned empty/invalid primary query, "
-                f"falling back to user query={request.query!r}"
+        try:
+            strategy = await self._llm.structured_output(prompt, ClassicSearchStrategy, system_prompt)
+            ctx.logger.debug(
+                f"Classic search LLM strategy primary={strategy.query.primary!r} "
+                f"retrieval={strategy.retrieval_strategy} "
+                f"filter_groups={len(strategy.filter_groups or [])}"
             )
-            strategy.query.primary = request.query
 
-        # 4. Combine with request.limit/offset → full SearchPlan
-        plan = SearchPlan(
-            query=strategy.query,
-            retrieval_strategy=strategy.retrieval_strategy,
-            filter_groups=strategy.filter_groups,
-            limit=request.limit,
-            offset=request.offset,
-        )
+            # Guard: if LLM returned an empty or non-word primary query, fall back to the
+            # user's original. LLMs sometimes return "", ".", or punctuation-only strings.
+            if not strategy.query.primary or not any(c.isalnum() for c in strategy.query.primary):
+                ctx.logger.warning(
+                    f"Classic search LLM returned empty/invalid primary query, "
+                    f"falling back to user query={request.query!r}"
+                )
+                strategy.query.primary = request.query
+
+            # 4. Combine with request.limit/offset → full SearchPlan
+            plan = SearchPlan(
+                query=strategy.query,
+                retrieval_strategy=strategy.retrieval_strategy,
+                filter_groups=strategy.filter_groups,
+                limit=request.limit,
+                offset=request.offset,
+            )
+        except LLMFatalError as exc:
+            ctx.logger.warning(
+                "Classic search LLM fatal error, using fallback plan. "
+                f"query={request.query!r} error={exc}"
+            )
+            plan = self._build_llm_fallback_plan(request)
 
         # 5. Execute
         results = await self._executor.execute(

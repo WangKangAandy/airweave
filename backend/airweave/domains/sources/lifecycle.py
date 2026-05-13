@@ -666,6 +666,22 @@ class SourceLifecycleService(SourceLifecycleServiceProtocol):
                     )
                 return DirectCredentialProvider(source_credentials, source_short_name=short_name)
 
+            # Same guard for dict-shaped credentials (e.g., {"api_key": "..."})
+            # when a connection carries oauth_type metadata from earlier flows.
+            if isinstance(source_credentials, dict):
+                if _credentials_have_access_token(source_credentials):
+                    return OAuthTokenProvider(
+                        credentials=source_credentials,
+                        oauth_type=oauth_type,
+                        oauth2_service=self._oauth2_service,
+                        source_short_name=short_name,
+                        connection_id=source_connection_data.connection_id,
+                        ctx=ctx,
+                        logger=logger,
+                        config_fields=source_connection_data.config_fields,
+                    )
+                return DirectCredentialProvider(source_credentials, source_short_name=short_name)
+
             # For OAuth sources without auth_config_class, normalization strips
             # the dict down to just the access_token string. Use the full
             # DecryptedCredential.raw so OAuthTokenProvider retains refresh_token.
@@ -674,6 +690,8 @@ class SourceLifecycleService(SourceLifecycleServiceProtocol):
                 if auth_config.decrypted_credential
                 else source_credentials
             )
+            if not _credentials_have_access_token(oauth_creds):
+                return DirectCredentialProvider(oauth_creds, source_short_name=short_name)
             return OAuthTokenProvider(
                 credentials=oauth_creds,
                 oauth_type=oauth_type,

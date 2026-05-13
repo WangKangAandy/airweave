@@ -179,46 +179,59 @@ const SourceConnectionStateView: React.FC<Props> = ({
     }
   }, [sourceConnectionId, sourceConnectionData]);
 
+  const requestFreshOAuthSession = useCallback(async () => {
+    const collectionReadable =
+      sourceConnection?.readable_collection_id ?? sourceConnectionData?.readable_collection_id;
+    const postOAuthReturn =
+      typeof window !== 'undefined' && collectionReadable
+        ? `${window.location.origin}/collections/${collectionReadable}`
+        : undefined;
+
+    const response = await apiClient.post(
+      `/source-connections/${sourceConnectionId}/reinitiate-oauth`,
+      postOAuthReturn ? { redirect_url: postOAuthReturn } : {},
+    );
+    if (!response.ok) {
+      let message = "Failed to restart authentication";
+      try {
+        const errorData = await response.json();
+        if (errorData.detail) {
+          message = errorData.detail;
+        }
+      } catch {
+        // response body wasn't JSON — use generic message
+      }
+      throw new Error(message);
+    }
+
+    const data = await response.json();
+    if (data.auth?.claim_token) {
+      sessionStorage.setItem(
+        `oauth_claim_token:${sourceConnectionId}`,
+        data.auth.claim_token
+      );
+    }
+    setSourceConnection(data);
+    return data;
+  }, [sourceConnectionId, sourceConnection?.readable_collection_id, sourceConnectionData?.readable_collection_id]);
+
   // Handler for re-initiating OAuth flow
   const handleRefreshAuthUrl = useCallback(async () => {
     setIsRefreshingAuth(true);
     try {
       const isNeedsReauth = sourceConnection?.status === 'needs_reauth';
-      const response = await apiClient.post(
-        `/source-connections/${sourceConnectionId}/reinitiate-oauth`,
-      );
-      if (response.ok) {
-        const data = await response.json();
-        if (data.auth?.claim_token) {
-          sessionStorage.setItem(
-            `oauth_claim_token:${sourceConnectionId}`,
-            data.auth.claim_token
-          );
-        }
-        setSourceConnection(data);
+      const data = await requestFreshOAuthSession();
 
-        // For NEEDS_REAUTH: redirect to OAuth provider immediately
-        if (isNeedsReauth && data.auth?.auth_url) {
-          window.location.href = data.auth.auth_url;
-          return;
-        }
-
-        toast({
-          title: "Ready",
-          description: "Click 'Connect now' to authorize.",
-        });
-      } else {
-        let message = "Failed to restart authentication";
-        try {
-          const errorData = await response.json();
-          if (errorData.detail) {
-            message = errorData.detail;
-          }
-        } catch {
-          // response body wasn't JSON — use generic message
-        }
-        throw new Error(message);
+      // For NEEDS_REAUTH: redirect to OAuth provider immediately
+      if (isNeedsReauth && data.auth?.auth_url) {
+        window.location.href = data.auth.auth_url;
+        return;
       }
+
+      toast({
+        title: "Ready",
+        description: "Click 'Connect now' to authorize.",
+      });
     } catch (error) {
       toast({
         title: "Error",
@@ -228,7 +241,22 @@ const SourceConnectionStateView: React.FC<Props> = ({
     } finally {
       setIsRefreshingAuth(false);
     }
-  }, [sourceConnectionId, sourceConnection?.status]);
+  }, [requestFreshOAuthSession, sourceConnection?.status]);
+
+  // Always refresh short-lived auth URL before redirecting to provider.
+  const handleConnectWithFreshUrl = useCallback(async () => {
+    setIsRefreshingAuth(true);
+    try {
+      const data = await requestFreshOAuthSession();
+      const authUrl = data?.auth?.auth_url;
+      if (!authUrl) {
+        throw new Error("Authorization URL missing after refresh");
+      }
+      window.location.href = authUrl;
+    } finally {
+      setIsRefreshingAuth(false);
+    }
+  }, [requestFreshOAuthSession]);
 
   useEffect(() => {
     const isNotAuthorized = sourceConnectionData?.status === 'pending_auth' || !sourceConnectionData?.auth?.authenticated;
@@ -504,12 +532,6 @@ const SourceConnectionStateView: React.FC<Props> = ({
       if (onConnectionDeleted) {
         onConnectionDeleted();
       }
-
-      // Open the add source flow if collection info is available
-      if (collectionId && collectionName) {
-        const store = useCollectionCreationStore.getState();
-        store.openForAddToCollection(collectionId, collectionName);
-      }
     } catch (error) {
       console.error('Error deleting source connection:', error);
       toast({
@@ -583,6 +605,7 @@ const SourceConnectionStateView: React.FC<Props> = ({
           sourceName={sourceConnection.name}
           sourceShortName={sourceConnection.short_name}
           authenticationUrl={sourceConnection.auth?.auth_url}
+          onConnect={handleConnectWithFreshUrl}
           onRefreshUrl={handleRefreshAuthUrl}
           isRefreshing={isRefreshingAuth}
           showBorder={false}

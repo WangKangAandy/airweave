@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCollectionCreationStore, AuthMode } from '@/stores/collectionCreationStore';
 import { apiClient } from '@/lib/api';
@@ -91,10 +91,12 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
   const [authFields, setAuthFields] = useState<Record<string, string>>({});
   const [configData, setConfigData] = useState<Record<string, string | string[] | boolean>>({});
   const [useOwnCredentials, setUseOwnCredentials] = useState(false);
-  // Initialize connection name from store or with source default
+  // Initialize connection name from store only.
+  // If empty, we show source-based placeholder and fall back to default on submit.
   const [connectionName, setConnectionName] = useState(
-    sourceConnectionName || (sourceName ? `${sourceName} Connection` : '')
+    sourceConnectionName || ''
   );
+  const hasNormalizedLegacyDefaultName = useRef(false);
   const [clientId, setClientId] = useState('');
   const [clientSecret, setClientSecret] = useState('');
   const [customRedirectUrl, setCustomRedirectUrl] = useState('');
@@ -125,16 +127,29 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
     }
   }, [connectionName]); // Only depend on connectionName changes
 
-  // Update connection name when source changes (when user goes back and selects different source)
+  // One-time migration for persisted modal state:
+  // previous behavior stored `${sourceName} Connection` as an actual value.
+  // Convert that legacy auto-filled value to empty so placeholder UX can show.
   useEffect(() => {
-    if (sourceName && !sourceConnectionName) {
-      // Only set default name if no custom name is set
-      const defaultName = `${sourceName} Connection`;
-      setConnectionName(defaultName);
+    if (hasNormalizedLegacyDefaultName.current || !sourceName) return;
+
+    const defaultName = `${sourceName} Connection`;
+    if (sourceConnectionName === defaultName && connectionName === defaultName) {
+      setConnectionName('');
+      setSourceConnectionName('');
     }
-  }, [sourceName, sourceConnectionName]);
+
+    hasNormalizedLegacyDefaultName.current = true;
+  }, [sourceName, sourceConnectionName, connectionName, setSourceConnectionName]);
 
   const [connectionUrl, setConnectionUrl] = useState('');
+  const visibleConfigFields = sourceDetails?.config_fields?.fields?.filter((field) => {
+    // Hide legacy Project ID field for GitLab; repository URL is the primary path.
+    if (selectedSource === 'gitlab' && field.name === 'project_id') {
+      return false;
+    }
+    return true;
+  }) || [];
 
   // Check if source uses OAuth1 (vs OAuth2)
   const isOAuth1 = () => {
@@ -283,6 +298,13 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
     }
   }, [sourceDetails, authProviderConnections, authMode, setAuthMode]);
 
+  // GitLab is now direct-only to avoid legacy OAuth path interference.
+  useEffect(() => {
+    if (selectedSource === 'gitlab' && authMode !== 'direct_auth') {
+      setAuthMode('direct_auth');
+    }
+  }, [selectedSource, authMode, setAuthMode]);
+
   // Helper function to get required config fields for a provider
   const getRequiredProviderConfigFields = (providerShortName: string) => {
     switch (providerShortName) {
@@ -297,9 +319,9 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
 
   // Check if form is valid for submission
   const isFormValid = () => {
-    // Must have a valid connection name (4-42 characters)
-    const trimmedName = connectionName.trim();
-    if (!trimmedName || trimmedName.length < 4 || trimmedName.length > 42) return false;
+    // Use user input if provided, otherwise fall back to source-based default name.
+    const effectiveName = connectionName.trim() || (sourceName ? `${sourceName} Connection` : '');
+    if (!effectiveName || effectiveName.length < 4 || effectiveName.length > 42) return false;
 
     // Check if custom redirect URL is valid (if provided)
     if (authMode === 'oauth2' && customRedirectUrl) {
@@ -365,9 +387,9 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
     setIsCreating(true);
 
     try {
-      // Validate connection name
-      if (!connectionName.trim()) {
-        toast.error('Please enter a connection name');
+      const effectiveName = connectionName.trim() || (sourceName ? `${sourceName} Connection` : '');
+      if (!effectiveName) {
+        toast.error('Unable to determine a connection name');
         setIsCreating(false);
         return;
       }
@@ -395,9 +417,9 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
         }
       } else if (authMode === 'oauth2') {
         // OAuth flow (OAuth1 or OAuth2)
-        authentication = {
-          ...(customRedirectUrl.trim() ? { redirect_uri: customRedirectUrl.trim() } : {}),
-        };
+        authentication = customRedirectUrl.trim()
+          ? { redirect_uri: customRedirectUrl.trim() }
+          : null;
 
         // Add credentials if BYOC or user chose to use own credentials
         if (requiresCustomOAuth() || useOwnCredentials) {
@@ -410,9 +432,11 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
 
           // OAuth1 uses consumer_key/consumer_secret, OAuth2 uses client_id/client_secret
           if (isOAuth1()) {
+            if (authentication === null) authentication = {};
             authentication.consumer_key = clientId;
             authentication.consumer_secret = clientSecret;
           } else {
+            if (authentication === null) authentication = {};
             authentication.client_id = clientId;
             authentication.client_secret = clientSecret;
           }
@@ -430,11 +454,13 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
         };
       }
 
+      const targetCollectionReadableId = isAddingToExisting ? existingCollectionId : collectionId;
+
       const payload: any = {
-        name: connectionName.trim(),
+        name: effectiveName,
         description: `${sourceName} connection for ${collectionName}`,
         short_name: selectedSource,
-        readable_collection_id: isAddingToExisting ? existingCollectionId : collectionId,
+        readable_collection_id: targetCollectionReadableId,
         // Only include authentication field if not null
         ...(authentication !== null && { authentication }),
         // For direct auth, sync immediately since we have credentials
@@ -444,6 +470,14 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
         // For sources with no auth methods, sync immediately
         sync_immediately: (authMode === 'direct_auth' || authMode === 'external_provider' || !authMode) && !supportsBrowseTree,
       };
+
+      // Post-OAuth redirect must use the browser's origin (e.g. LAN http://192.168.x.x:8080),
+      // not settings.app_url from the server (defaults to http://localhost:8080) — otherwise
+      // the user lands on the wrong host without ?status=success&source_connection_id= and
+      // verify-oauth / success handling never runs.
+      if (authMode === 'oauth2' && targetCollectionReadableId && typeof window !== 'undefined') {
+        payload.redirect_url = `${window.location.origin}/collections/${targetCollectionReadableId}`;
+      }
 
       // Add config fields if any - filter out empty values
       if (Object.keys(configData).length > 0) {
@@ -527,7 +561,6 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
     }
   };
 
-
   return (
     <div className="h-full flex flex-col">
       <div className="px-8 py-8 flex-1 overflow-auto">
@@ -601,7 +634,7 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
                         setConnectionName(value);
                         setSourceConnectionName(value);
                       }}
-                      placeholder="Enter connection name"
+                      placeholder={sourceName ? `${sourceName} Connection` : 'Enter connection name'}
                       validation={sourceConnectionNameValidation}
                       className={cn(
                         "focus:border-gray-400 dark:focus:border-gray-600",
@@ -679,7 +712,7 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
                             placeholder=""
                             value={authFields[field.name] || ''}
                             onChange={(value) => setAuthFields({ ...authFields, [field.name]: value })}
-                            validation={getAuthFieldValidation(field.name, sourceDetails?.short_name)}
+                            validation={getAuthFieldValidation(field.name, sourceDetails?.short_name ?? selectedSource)}
                             className={cn(
                               "focus:border-gray-400 dark:focus:border-gray-600",
                               isDark
@@ -693,15 +726,15 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
                   )}
 
                   {/* Config fields (additional configuration) */}
-                  {sourceDetails?.config_fields?.fields && sourceDetails.config_fields.fields.length > 0 && (
+                  {visibleConfigFields.length > 0 && (
                     <div className="space-y-3">
                       <label className="block text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                         {(() => {
-                          const hasRequiredFields = sourceDetails.config_fields.fields.some((field: any) => field.required);
+                          const hasRequiredFields = visibleConfigFields.some((field: any) => field.required);
                           return hasRequiredFields ? "Additional Configuration" : "Additional Configuration (optional)";
                         })()}
                       </label>
-                      {sourceDetails.config_fields.fields.map((field) => (
+                      {visibleConfigFields.map((field) => (
                         field.type === 'boolean' ? (
                           <label key={field.name} className="flex items-center justify-between gap-4 cursor-pointer group">
                             <div className="min-w-0">

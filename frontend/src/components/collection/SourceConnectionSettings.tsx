@@ -18,15 +18,12 @@ import {
 import {
   AlertDialog,
   AlertDialogAction,
-  AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle
 } from '@/components/ui/alert-dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { MoreVertical, Edit, Clock, Trash } from 'lucide-react';
 import { apiClient } from '@/lib/api';
@@ -42,6 +39,10 @@ interface Schedule {
   continuous?: boolean;
   cursor_field?: string;
   cursor_value?: any;
+  companion_full_sync?: {
+    interval_days?: number;
+    cron?: string;
+  };
 }
 
 interface SourceConnection {
@@ -87,12 +88,16 @@ export const SourceConnectionSettings: React.FC<SourceConnectionSettingsProps> =
   resolvedTheme,
   onSyncStarted
 }) => {
+  const isMinuteLevelCron = (cron?: string | null): boolean => {
+    if (!cron) return false;
+    return /^(\*\/([1-5]?\d)|([0-5]?\d)) \* \* \* \*$/.test(cron.trim());
+  };
+
   // Dialog states
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [showScheduleDialog, setShowScheduleDialog] = useState(false);
   const [showEditDetailsDialog, setShowEditDetailsDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
 
   // Schedule state
@@ -122,7 +127,7 @@ export const SourceConnectionSettings: React.FC<SourceConnectionSettingsProps> =
       return {
         type: "scheduled",
         frequency: "custom",
-        cronExpression: cron
+        cronExpression: cron,
       };
     }
 
@@ -136,7 +141,7 @@ export const SourceConnectionSettings: React.FC<SourceConnectionSettingsProps> =
       return {
         type: "scheduled",
         frequency: "hourly",
-        minute: isNaN(minuteNum) ? 0 : minuteNum
+        minute: isNaN(minuteNum) ? 0 : minuteNum,
       };
     }
 
@@ -146,7 +151,7 @@ export const SourceConnectionSettings: React.FC<SourceConnectionSettingsProps> =
         type: "scheduled",
         frequency: "daily",
         hour: isNaN(hourNum) ? 0 : hourNum,
-        minute: isNaN(minuteNum) ? 0 : minuteNum
+        minute: isNaN(minuteNum) ? 0 : minuteNum,
       };
     }
 
@@ -158,7 +163,7 @@ export const SourceConnectionSettings: React.FC<SourceConnectionSettingsProps> =
         frequency: "weekly",
         hour: isNaN(hourNum) ? 0 : hourNum,
         minute: isNaN(minuteNum) ? 0 : minuteNum,
-        dayOfWeek: isNaN(dayOfWeekNum) ? 1 : dayOfWeekNum
+        dayOfWeek: isNaN(dayOfWeekNum) ? 1 : dayOfWeekNum,
       };
     }
 
@@ -170,7 +175,7 @@ export const SourceConnectionSettings: React.FC<SourceConnectionSettingsProps> =
         frequency: "monthly",
         hour: isNaN(hourNum) ? 0 : hourNum,
         minute: isNaN(minuteNum) ? 0 : minuteNum,
-        dayOfMonth: isNaN(dayOfMonthNum) ? 1 : dayOfMonthNum
+        dayOfMonth: isNaN(dayOfMonthNum) ? 1 : dayOfMonthNum,
       };
     }
 
@@ -178,7 +183,7 @@ export const SourceConnectionSettings: React.FC<SourceConnectionSettingsProps> =
     return {
       type: "scheduled",
       frequency: "custom",
-      cronExpression: cron
+      cronExpression: cron,
     };
   };
 
@@ -186,6 +191,12 @@ export const SourceConnectionSettings: React.FC<SourceConnectionSettingsProps> =
   useEffect(() => {
     if (sourceConnection?.schedule?.cron) {
       const config = parseCronToScheduleConfig(sourceConnection.schedule.cron);
+      if (sourceConnection.schedule.companion_full_sync) {
+        config.companionFullSync = {
+          intervalDays: sourceConnection.schedule.companion_full_sync.interval_days,
+          cron: sourceConnection.schedule.companion_full_sync.cron,
+        };
+      }
       setScheduleConfig(config);
     } else {
       setScheduleConfig({
@@ -259,7 +270,17 @@ export const SourceConnectionSettings: React.FC<SourceConnectionSettingsProps> =
       }
 
       const updateData = {
-        schedule: cronExpression ? { cron: cronExpression } : null
+        schedule: cronExpression
+          ? {
+            cron: cronExpression,
+            companion_full_sync: isMinuteLevelCron(cronExpression) && scheduleConfig.companionFullSync
+              ? {
+                interval_days: scheduleConfig.companionFullSync.intervalDays,
+                cron: scheduleConfig.companionFullSync.cron,
+              }
+              : undefined,
+          }
+          : null
       };
 
       const response = await apiClient.patch(
@@ -291,14 +312,18 @@ export const SourceConnectionSettings: React.FC<SourceConnectionSettingsProps> =
       if (field.required) {
         const value = editFormData.config_fields[field.name];
 
-        if (field.type === 'array') {
+        if (field.type === 'boolean') {
+          if (value === undefined || value === null) {
+            return false;
+          }
+        } else if (field.type === 'array') {
           // For arrays, check if it has at least one item
           if (!value || !Array.isArray(value) || value.length === 0) {
             return false;
           }
         } else {
           // For other types, check if value exists and is not empty
-          if (!value || String(value).trim() === '') {
+          if (value === undefined || value === null || String(value).trim() === '') {
             return false;
           }
         }
@@ -452,8 +477,6 @@ export const SourceConnectionSettings: React.FC<SourceConnectionSettingsProps> =
 
   // Handle delete
   const handleDelete = async () => {
-    if (deleteConfirmText !== sourceConnection.name) return;
-
     setIsDeleting(true);
     try {
       const response = await apiClient.delete(`/source-connections/${sourceConnection.id}`);
@@ -464,7 +487,6 @@ export const SourceConnectionSettings: React.FC<SourceConnectionSettingsProps> =
       }
 
       setShowDeleteDialog(false);
-      setDeleteConfirmText('');
 
       toast.success("Source connection deleted. All synced data has been permanently removed.");
 
@@ -609,56 +631,22 @@ export const SourceConnectionSettings: React.FC<SourceConnectionSettingsProps> =
             <AlertDialogHeader>
               <AlertDialogTitle>Delete Source Connection</AlertDialogTitle>
               <AlertDialogDescription>
-                <div className="space-y-4">
-                  <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-4 space-y-3">
-                    <ul className="space-y-2 ml-4">
-                      <li className="flex items-start">
-                        <span className="mr-2">•</span>
-                        <div>
-                          <p className="text-sm text-muted-foreground">
-                            You will need to re-authenticate and reconfigure the connection to sync data from this source again.
-                          </p>
-                        </div>
-                      </li>
-                      <li className="flex items-start">
-                        <span className="mr-2">•</span>
-                        <div>
-                          <p className="text-sm text-muted-foreground">
-                            All data that was synced from this source will be permanently removed from the knowledge base and cannot be recovered.
-                          </p>
-                        </div>
-                      </li>
-                    </ul>
-                  </div>
-                </div>
-
-                <div className="mt-4">
-                  <Label htmlFor="confirm-delete" className="text-sm font-medium block mb-2">
-                    Type <span className="font-bold">{sourceConnection.name}</span> to confirm deletion
-                  </Label>
-                  <Input
-                    id="confirm-delete"
-                    value={deleteConfirmText}
-                    onChange={(e) => setDeleteConfirmText(e.target.value)}
-                    className="w-full"
-                    placeholder={sourceConnection.name}
-                  />
-                </div>
+                Deleting this source connection will permanently remove its synced data from your
+                collection. This action cannot be undone. Please confirm only if you are sure.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => {
+              <Button variant="outline" onClick={() => {
                 setShowDeleteDialog(false);
-                setDeleteConfirmText('');
               }}>
                 Cancel
-              </AlertDialogCancel>
+              </Button>
               <AlertDialogAction
                 onClick={handleDelete}
-                disabled={deleteConfirmText !== sourceConnection.name || isDeleting}
+                disabled={isDeleting}
                 className="bg-red-600 text-white hover:bg-red-700 dark:bg-red-500 dark:text-white dark:hover:bg-red-600 disabled:opacity-50"
               >
-                {isDeleting ? 'Deleting...' : 'Delete Connection'}
+                {isDeleting ? 'Deleting...' : 'Confirm Delete'}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
