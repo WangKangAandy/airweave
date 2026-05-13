@@ -193,6 +193,18 @@ async def test_timeout_raises_timeout_error():
 
 
 @pytest.mark.asyncio
+async def test_pool_timeout_raises_timeout_error_with_pool_hint():
+    """PoolTimeout maps to EmbedderTimeoutError with pool-specific guidance."""
+    client = AsyncMock()
+    client.post.side_effect = httpx.PoolTimeout("pool timed out")
+
+    embedder = _build_embedder(client_mock=client)
+
+    with pytest.raises(EmbedderTimeoutError, match="HTTP client pool"):
+        await embedder.embed("test")
+
+
+@pytest.mark.asyncio
 async def test_request_error_raises_connection_error():
     """Other httpx.RequestError raises EmbedderConnectionError."""
     client = AsyncMock()

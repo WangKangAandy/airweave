@@ -47,9 +47,26 @@ class OAuthType(str, Enum):
 class ScheduleConfig(BaseModel):
     """Schedule configuration for syncs."""
 
+    class CompanionFullSyncConfig(BaseModel):
+        """Optional companion full-sync configuration for minute-level schedules."""
+
+        interval_days: Optional[int] = Field(
+            None,
+            ge=1,
+            description="Run companion full sync every N days (e.g., 2)",
+        )
+        cron: Optional[str] = Field(
+            None,
+            description="Explicit cron for companion full sync; overrides interval_days when set.",
+        )
+
     cron: Optional[str] = Field(None, description="Cron expression for scheduled syncs")
     continuous: bool = Field(False, description="Enable continuous sync mode")
     cursor_field: Optional[str] = Field(None, description="Field for incremental sync")
+    companion_full_sync: Optional[CompanionFullSyncConfig] = Field(
+        None,
+        description="Optional companion full-sync cadence for minute-level schedules.",
+    )
 
 
 # ===========================

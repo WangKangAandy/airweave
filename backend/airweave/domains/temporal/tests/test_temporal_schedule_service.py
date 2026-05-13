@@ -149,6 +149,30 @@ def test_cleanup_cron_is_daily():
     assert re.match(r"^\d{1,2} \d{1,2} \* \* \*$", cleanup_spec.cron_override)
 
 
+def test_cleanup_cron_respects_interval_days_override():
+    """Companion cleanup cadence can be configured by interval days."""
+    import re
+
+    specs = TemporalScheduleService._schedule_specs_for_cron(
+        "*/5 * * * *",
+        cleanup_interval_days=2,
+    )
+    cleanup_spec = specs[1]
+    assert cleanup_spec.cron_override is not None
+    assert re.match(r"^\d{1,2} \d{1,2} \*/2 \* \*$", cleanup_spec.cron_override)
+
+
+def test_cleanup_cron_respects_explicit_cron_override():
+    """Explicit cleanup cron should take precedence over interval_days."""
+    specs = TemporalScheduleService._schedule_specs_for_cron(
+        "*/5 * * * *",
+        cleanup_interval_days=2,
+        cleanup_cron_override="15 3 */4 * *",
+    )
+    cleanup_spec = specs[1]
+    assert cleanup_spec.cron_override == "15 3 */4 * *"
+
+
 # ---------------------------------------------------------------------------
 # _check_schedule_exists
 # ---------------------------------------------------------------------------

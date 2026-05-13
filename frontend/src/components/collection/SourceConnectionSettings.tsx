@@ -39,6 +39,10 @@ interface Schedule {
   continuous?: boolean;
   cursor_field?: string;
   cursor_value?: any;
+  companion_full_sync?: {
+    interval_days?: number;
+    cron?: string;
+  };
 }
 
 interface SourceConnection {
@@ -84,6 +88,11 @@ export const SourceConnectionSettings: React.FC<SourceConnectionSettingsProps> =
   resolvedTheme,
   onSyncStarted
 }) => {
+  const isMinuteLevelCron = (cron?: string | null): boolean => {
+    if (!cron) return false;
+    return /^(\*\/([1-5]?\d)|([0-5]?\d)) \* \* \* \*$/.test(cron.trim());
+  };
+
   // Dialog states
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [showScheduleDialog, setShowScheduleDialog] = useState(false);
@@ -118,7 +127,7 @@ export const SourceConnectionSettings: React.FC<SourceConnectionSettingsProps> =
       return {
         type: "scheduled",
         frequency: "custom",
-        cronExpression: cron
+        cronExpression: cron,
       };
     }
 
@@ -132,7 +141,7 @@ export const SourceConnectionSettings: React.FC<SourceConnectionSettingsProps> =
       return {
         type: "scheduled",
         frequency: "hourly",
-        minute: isNaN(minuteNum) ? 0 : minuteNum
+        minute: isNaN(minuteNum) ? 0 : minuteNum,
       };
     }
 
@@ -142,7 +151,7 @@ export const SourceConnectionSettings: React.FC<SourceConnectionSettingsProps> =
         type: "scheduled",
         frequency: "daily",
         hour: isNaN(hourNum) ? 0 : hourNum,
-        minute: isNaN(minuteNum) ? 0 : minuteNum
+        minute: isNaN(minuteNum) ? 0 : minuteNum,
       };
     }
 
@@ -154,7 +163,7 @@ export const SourceConnectionSettings: React.FC<SourceConnectionSettingsProps> =
         frequency: "weekly",
         hour: isNaN(hourNum) ? 0 : hourNum,
         minute: isNaN(minuteNum) ? 0 : minuteNum,
-        dayOfWeek: isNaN(dayOfWeekNum) ? 1 : dayOfWeekNum
+        dayOfWeek: isNaN(dayOfWeekNum) ? 1 : dayOfWeekNum,
       };
     }
 
@@ -166,7 +175,7 @@ export const SourceConnectionSettings: React.FC<SourceConnectionSettingsProps> =
         frequency: "monthly",
         hour: isNaN(hourNum) ? 0 : hourNum,
         minute: isNaN(minuteNum) ? 0 : minuteNum,
-        dayOfMonth: isNaN(dayOfMonthNum) ? 1 : dayOfMonthNum
+        dayOfMonth: isNaN(dayOfMonthNum) ? 1 : dayOfMonthNum,
       };
     }
 
@@ -174,7 +183,7 @@ export const SourceConnectionSettings: React.FC<SourceConnectionSettingsProps> =
     return {
       type: "scheduled",
       frequency: "custom",
-      cronExpression: cron
+      cronExpression: cron,
     };
   };
 
@@ -182,6 +191,12 @@ export const SourceConnectionSettings: React.FC<SourceConnectionSettingsProps> =
   useEffect(() => {
     if (sourceConnection?.schedule?.cron) {
       const config = parseCronToScheduleConfig(sourceConnection.schedule.cron);
+      if (sourceConnection.schedule.companion_full_sync) {
+        config.companionFullSync = {
+          intervalDays: sourceConnection.schedule.companion_full_sync.interval_days,
+          cron: sourceConnection.schedule.companion_full_sync.cron,
+        };
+      }
       setScheduleConfig(config);
     } else {
       setScheduleConfig({
@@ -255,7 +270,17 @@ export const SourceConnectionSettings: React.FC<SourceConnectionSettingsProps> =
       }
 
       const updateData = {
-        schedule: cronExpression ? { cron: cronExpression } : null
+        schedule: cronExpression
+          ? {
+            cron: cronExpression,
+            companion_full_sync: isMinuteLevelCron(cronExpression) && scheduleConfig.companionFullSync
+              ? {
+                interval_days: scheduleConfig.companionFullSync.intervalDays,
+                cron: scheduleConfig.companionFullSync.cron,
+              }
+              : undefined,
+          }
+          : null
       };
 
       const response = await apiClient.patch(

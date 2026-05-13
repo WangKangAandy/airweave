@@ -161,8 +161,15 @@ services:
     environment:
       ENABLE_CUDA: 0
       WORKERS_PER_NODE: 1
+    # Image has no wget; use stdlib so Docker reports healthy when inference is up.
     healthcheck:
-      test: [ "CMD", "wget", "--spider", "-q", "http://localhost:8080/health" ]
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/.well-known/ready')",
+        ]
       interval: 30s
       timeout: 10s
       retries: 3

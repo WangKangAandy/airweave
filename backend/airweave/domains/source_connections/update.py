@@ -179,8 +179,11 @@ class SourceConnectionUpdateService(SourceConnectionUpdateServiceProtocol):
         # If schedule is None, treat it as removing the schedule
         if update_data["schedule"] is None:
             new_cron = None
+            schedule_sync_metadata = None
         else:
-            new_cron = update_data["schedule"].get("cron")
+            schedule_payload = update_data["schedule"]
+            new_cron = schedule_payload.get("cron")
+            schedule_sync_metadata = self._build_schedule_sync_metadata(schedule_payload)
 
         if source_conn.sync_id:
             # Update existing sync's schedule
@@ -194,6 +197,7 @@ class SourceConnectionUpdateService(SourceConnectionUpdateServiceProtocol):
                 new_cron,
                 ctx,
                 uow,
+                schedule_sync_metadata=schedule_sync_metadata,
             )
         elif new_cron:
             # No sync exists but we're adding a schedule - create a new sync
@@ -231,6 +235,16 @@ class SourceConnectionUpdateService(SourceConnectionUpdateServiceProtocol):
                 ctx=ctx,
                 uow=uow,
             )
+
+            if schedule_sync_metadata:
+                merged_metadata = self._merge_metadata(sync.sync_metadata, schedule_sync_metadata)
+                await self._sync_repo.update(
+                    uow.session,
+                    db_obj=sync,
+                    obj_in=schemas.SyncUpdate(sync_metadata=merged_metadata),
+                    ctx=ctx,
+                    uow=uow,
+                )
 
             # Apply the sync_id update to the source connection now
             # so that temporal_schedule_service can find it
@@ -322,12 +336,19 @@ class SourceConnectionUpdateService(SourceConnectionUpdateServiceProtocol):
         cron_schedule: Optional[str],
         ctx: ApiContext,
         uow: UnitOfWork,
+        schedule_sync_metadata: Optional[dict[str, Any]] = None,
     ) -> None:
         """Update sync schedule in database and Temporal."""
         sync = await self._sync_repo.get_without_connections(db, id=sync_id, ctx=ctx)
         if sync:
             # Update in database
-            sync_update = schemas.SyncUpdate(cron_schedule=cron_schedule)
+            sync_update_data: dict[str, Any] = {"cron_schedule": cron_schedule}
+            if schedule_sync_metadata is not None:
+                sync_update_data["sync_metadata"] = self._merge_metadata(
+                    sync.sync_metadata,
+                    schedule_sync_metadata,
+                )
+            sync_update = schemas.SyncUpdate(**sync_update_data)
             await self._sync_repo.update(db, db_obj=sync, obj_in=sync_update, ctx=ctx, uow=uow)
 
             # Update in Temporal
@@ -345,6 +366,42 @@ class SourceConnectionUpdateService(SourceConnectionUpdateServiceProtocol):
                     ctx=ctx,
                     uow=uow,
                 )
+
+    @staticmethod
+    def _build_schedule_sync_metadata(schedule_payload: dict[str, Any]) -> Optional[dict[str, Any]]:
+        """Build sync_metadata patch from schedule payload companion config."""
+        companion_cfg = schedule_payload.get("companion_full_sync")
+        if not isinstance(companion_cfg, dict):
+            return None
+
+        companion_patch: dict[str, Any] = {}
+        cron = companion_cfg.get("cron")
+        interval_days = companion_cfg.get("interval_days")
+
+        if isinstance(cron, str) and cron.strip():
+            companion_patch["cron"] = cron.strip()
+        if isinstance(interval_days, int) and interval_days > 0:
+            companion_patch["interval_days"] = interval_days
+
+        if not companion_patch:
+            return None
+
+        return {"minute_level_schedule": {"companion_full_sync": companion_patch}}
+
+    @staticmethod
+    def _merge_metadata(existing: Any, patch: dict[str, Any]) -> dict[str, Any]:
+        """Merge schedule metadata patch into existing sync_metadata."""
+        base: dict[str, Any] = dict(existing) if isinstance(existing, dict) else {}
+
+        def _merge(dst: dict[str, Any], src: dict[str, Any]) -> None:
+            for key, value in src.items():
+                if isinstance(value, dict) and isinstance(dst.get(key), dict):
+                    _merge(dst[key], value)
+                else:
+                    dst[key] = value
+
+        _merge(base, patch)
+        return base
 
     async def _update_auth_fields(
         self,

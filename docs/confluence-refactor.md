@@ -175,7 +175,131 @@ flowchart LR
 
 ---
 
-## 8. 主要风险与依赖
+## 8. 运行策略（当前确认版）
+
+为兼顾高频更新与系统成本，内网站点源采用“双轨同步”：
+
+1. **每 10 分钟增量同步**（默认）
+   - 目标：处理**新增**与**修改**页面。
+   - 发现方式：调用 Confluence 站点 REST 的 `content/search`（CQL）按更新时间窗口筛选 page id，再按 id 拉 `body.storage`。
+   - 注意：这里的 **CQL 是 Confluence 官方查询语法**（`/rest/api/content/search?cql=...`），不是 Airweave 内部语法。
+2. **每 2 天全量校准**（兜底）
+   - 目标：处理漏网变更、权限变更、游标偏差以及删除一致性。
+   - 全量任务完成后，以站点当前可见全集对索引进行对账修正。
+
+### 8.1 删除、修改、新增三类变更的处理
+
+| 变更类型 | 增量（10 分钟） | 全量（2 天） |
+|------|------|------|
+| 新增 | 通过 CQL 命中新页面并入库 | 再次覆盖校验 |
+| 修改 | 通过 CQL 命中并重拉正文（按 hash/version 更新） | 再次覆盖校验 |
+| 删除 | 优先查询 `GET /rest/api/content?status=trashed&type=page` 做准实时补偿删除 | 做最终一致性删除（差集清理） |
+
+### 8.2 官方 API 边界（基于站点 REST）
+
+- 可用：`GET /rest/api/content?status=trashed&type=page`（可分页、可加 `spaceKey`）用于回收站内容发现。
+- 谨慎：很多 Server/DC 版本里，`content/search` 的 CQL 不支持 `status=trashed` 条件（会返回 400）。
+- 结论：**删除路径不要只依赖 CQL**，应将 `status=trashed` 列举与全量校准共同作为删除保障机制。
+
+### 8.3 实现约束：预留扩展接口，避免写死
+
+为确保后续可平滑升级到“双计划策略”（10 分钟增量 + 2 天全量）及更多同步模式，本次适配必须遵循以下约束：
+
+1. **调度能力不可写死在 Confluence 源内部**
+   - 不在 source 代码里硬编码“固定 10 分钟”或“固定 2 天”常量。
+   - 调度节奏由 `schedule` 配置或调度层（Temporal schedule service）驱动。
+2. **发现策略抽象为可替换接口**
+   - 将“增量发现（CQL/search）”“回收站发现（status=trashed）”“全量枚举”拆分为独立方法/策略函数。
+   - 允许按站点版本能力切换（例如某些版本不支持 CQL `status`）。
+3. **删除处理走统一入口**
+   - 删除判定与发出删除实体（orphan/trashed）使用统一逻辑层，避免在多个调用路径分叉实现。
+4. **为未来双计划提供数据结构预留**
+   - 当前即使只接一个 `schedule.cron`，也要在实现上保留 secondary/companion schedule 扩展点（如全量校准 companion 任务）。
+   - 避免把“增量=唯一计划”假设写进持久化模型和业务分支。
+5. **能力探测与降级明确**
+   - 对关键 API 能力（`content/search`、`status=trashed`、`expand=body.storage`）做探测与日志标记。
+   - 能力不足时走降级路径（space/content 枚举、全量校准兜底），而非直接失败。
+
+> 实施原则：先交付可用最小闭环（URL+PAT+可搜），同时把“可扩展调度与策略切换”作为代码结构约束一次性打好地基。
+
+### 8.4 联调示例：`PATCH /source-connections/{id}` 调度配置
+
+以下示例用于验证前后端调度链路（UI 或 API 直调均可）。其中：
+
+- `BASE_URL`：Airweave API 地址
+- `SC_ID`：source_connection 的 UUID
+- `TOKEN`：用户访问令牌（非 Confluence PAT）
+- `ORG_ID`：组织 ID（如需）
+
+#### 1) 关闭计划（one-time）
+
+```bash
+curl -X PATCH "$BASE_URL/source-connections/$SC_ID" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "X-Organization-ID: $ORG_ID" \
+  -d '{
+    "schedule": null
+  }'
+```
+
+#### 2) 每日定时（无 companion）
+
+```bash
+curl -X PATCH "$BASE_URL/source-connections/$SC_ID" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "X-Organization-ID: $ORG_ID" \
+  -d '{
+    "schedule": {
+      "cron": "0 2 * * *"
+    }
+  }'
+```
+
+#### 3) 每 10 分钟增量 + 每 2 天全量校准（推荐）
+
+```bash
+curl -X PATCH "$BASE_URL/source-connections/$SC_ID" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "X-Organization-ID: $ORG_ID" \
+  -d '{
+    "schedule": {
+      "cron": "*/10 * * * *",
+      "companion_full_sync": {
+        "interval_days": 2
+      }
+    }
+  }'
+```
+
+#### 4) 每 10 分钟增量 + 指定 companion cron（覆盖 interval_days）
+
+```bash
+curl -X PATCH "$BASE_URL/source-connections/$SC_ID" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "X-Organization-ID: $ORG_ID" \
+  -d '{
+    "schedule": {
+      "cron": "*/10 * * * *",
+      "companion_full_sync": {
+        "cron": "15 3 */2 * *"
+      }
+    }
+  }'
+```
+
+#### 5) 执行后核对项
+
+1. API 响应中的 `schedule.cron` 已更新为目标值。
+2. 对分钟级 cron，后端日志出现 minute schedule 与 companion cleanup/full schedule 的创建或更新记录。
+3. 下一个周期触发后，`sync_job` 中可观察到增量任务执行；在 companion 周期触发时可观察到 full 清理任务执行。
+
+---
+
+## 9. 主要风险与依赖
 
 - **Confluence 版本差异**：DC/Server 的 REST 行为、分页参数需以目标实例为准。
 - **权限**：PAT 仅能索引用其 **可见** 页面；**全站** = 该令牌的可见全集，非匿名全库。
@@ -184,7 +308,7 @@ flowchart LR
 
 ---
 
-## 9. 相关代码位置（便于联调定位）
+## 10. 相关代码位置（便于联调定位）
 
 以下随重构会迁移或废弃部分路径，仅作入口参考：
 
@@ -196,14 +320,14 @@ flowchart LR
 
 ---
 
-## 10. 文档维护
+## 11. 文档维护
 
 - 新 `short_name`、环境变量与凭据字段确定后，更新 §6、§9。
 - 若将来恢复「Cloud 版 Confluence」为第二源，另起章节说明与 **内网站点源** 的隔离，避免再引入「登录验证」与 PAT 混源。
 
 ---
 
-## 11. 变更记录
+## 12. 变更记录
 
 | 日期 | 说明 |
 |------|------|
@@ -212,3 +336,6 @@ flowchart LR
 | 2026-04-24 | 删除 Confluence MCP 网关/代理方案表述；检索路径统一为 **Confluence → Airweave 同步管道 → 本侧向量检索** |
 | 2026-04-24 | 补充 mthreads 联调站点 URL；明确 PAT **禁止**入仓，仅环境变量 / 密钥系统 |
 | 2026-04-24 | 在 P1 中补充 `body.storage`（XHTML/Storage）后处理与正文格式单测建议，降低分块检索噪声风险 |
+| 2026-04-25 | 新增运行策略：**10 分钟增量 + 2 天全量校准**；明确删除链路使用 `status=trashed` 查询与全量兜底 |
+| 2026-04-25 | 新增实现约束：适配阶段需预留扩展接口、避免将调度策略写死在 Confluence 源实现中 |
+| 2026-04-25 | 补充调度联调示例：`PATCH /source-connections/{id}` 的 4 类请求样例与执行后核对项 |

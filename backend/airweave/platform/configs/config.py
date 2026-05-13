@@ -122,7 +122,24 @@ class CodaConfig(SourceConfig):
 class ConfluenceConfig(SourceConfig):
     """Confluence configuration schema."""
 
-    pass
+    site_url: str = Field(
+        ...,
+        title="Confluence Site URL",
+        description=(
+            "Confluence site root URL (e.g. https://confluence.example.com). "
+            "Airweave will call /rest/api on this host."
+        ),
+        min_length=8,
+    )
+
+    @field_validator("site_url")
+    @classmethod
+    def validate_site_url(cls, value: str) -> str:
+        """Validate and normalize Confluence site URL."""
+        normalized = value.strip().rstrip("/")
+        if not normalized:
+            raise ValueError("site_url is required")
+        return validate_url(normalized)
 
 
 class DropboxConfig(SourceConfig):

@@ -421,10 +421,16 @@ class CodaAuthConfig(APIKeyAuthConfig):
     )
 
 
-class ConfluenceAuthConfig(OAuth2WithRefreshAuthConfig):
-    """Confluence authentication credentials schema."""
+class ConfluenceAuthConfig(APIKeyAuthConfig):
+    """Confluence authentication credentials schema (site PAT)."""
 
-    # Inherits refresh_token and access_token from OAuth2WithRefreshAuthConfig
+    api_key: str = Field(
+        title="Personal Access Token",
+        description=(
+            "Confluence Personal Access Token (PAT) used as Bearer token for /rest/api calls."
+        ),
+        min_length=8,
+    )
 
 
 class Document360AuthConfig(AuthConfig):

@@ -24,7 +24,17 @@ export interface SyncScheduleConfig {
   dayOfWeek?: number;
   dayOfMonth?: number;
   cronExpression?: string;
+  companionFullSync?: {
+    intervalDays?: number;
+    cron?: string;
+  };
 }
+
+const isMinuteLevelCron = (cron?: string | null): boolean => {
+  if (!cron) return false;
+  const trimmed = cron.trim();
+  return /^(\*\/([1-5]?\d)|([0-5]?\d)) \* \* \* \*$/.test(trimmed);
+};
 
 interface SyncScheduleProps {
   value: SyncScheduleConfig;
@@ -91,7 +101,8 @@ export function SyncSchedule({ value, onChange }: SyncScheduleProps) {
         minute: value.minute,
         dayOfWeek: value.dayOfWeek,
         dayOfMonth: value.dayOfMonth,
-        cronExpression: value.cronExpression
+        cronExpression: value.cronExpression,
+        companionFullSync: value.companionFullSync,
       };
 
     onChange(newConfig);
@@ -127,6 +138,10 @@ export function SyncSchedule({ value, onChange }: SyncScheduleProps) {
     }
     return true;
   };
+
+  const effectiveCron = buildCronExpression(value);
+  const showCompanionConfig =
+    value.type === "scheduled" && isMinuteLevelCron(effectiveCron);
 
   return (
     <Card className="bg-background border-none">
@@ -338,6 +353,38 @@ export function SyncSchedule({ value, onChange }: SyncScheduleProps) {
                           ))}
                         </SelectContent>
                       </Select>
+                    </div>
+                  )}
+
+                  {/* Companion full sync for minute-level schedules */}
+                  {showCompanionConfig && (
+                    <div className="max-w-md mx-auto mt-4 rounded-md bg-muted p-3 space-y-2">
+                      <p className="text-xs text-muted-foreground font-medium">
+                        Companion full sync (for incremental schedules)
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <Label htmlFor="companionInterval" className="min-w-28 text-right text-xs">
+                          Every N days:
+                        </Label>
+                        <Input
+                          id="companionInterval"
+                          type="number"
+                          min={1}
+                          max={30}
+                          value={value.companionFullSync?.intervalDays ?? 2}
+                          onChange={(e) => {
+                            const interval = parseInt(e.target.value || "2", 10);
+                            onChange({
+                              ...value,
+                              companionFullSync: {
+                                ...value.companionFullSync,
+                                intervalDays: Number.isNaN(interval) ? 2 : Math.max(1, interval),
+                              },
+                            });
+                          }}
+                          className="w-24"
+                        />
+                      </div>
                     </div>
                   )}
 
