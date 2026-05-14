@@ -683,9 +683,6 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
                   {/* Direct auth fields (API keys, passwords, config) */}
                   {authMode === 'direct_auth' && requiresAuthFields() && sourceDetails?.auth_fields?.fields && (
                     <div className="space-y-3">
-                      <label className="block text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Direct Credentials Configuration
-                      </label>
                       {sourceDetails.auth_fields.fields.map((field) => (
                         <div key={field.name}>
                           <label className="block text-sm font-medium mb-1">

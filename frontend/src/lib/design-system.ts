@@ -18,6 +18,16 @@ export const DESIGN_SYSTEM = {
         }
     },
 
+    /**
+     * Text fields aligned with ValidatedInput defaults.
+     * `singleLineMinHeight` matches `buttons.heights.primary` (40px / `h-10`).
+     */
+    forms: {
+        validatedField:
+            'w-full px-4 py-2 rounded-lg text-sm border transition-colors duration-150 focus:outline-none',
+        singleLineMinHeight: 'min-h-10',
+    },
+
     // Text Sizes
     typography: {
         sizes: {
