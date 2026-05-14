@@ -218,5 +218,4 @@ docker logs airweave-frontend
 docker compose -f docker/docker-compose.yml down
 ```
 
-Frontend change not taking effect after code edits:
-- See `docs/debug/frontend-change-not-effective.md` for the quick rebuild/restart workflow and `frontend/dist` permission fix.
+**Frontend changes and `http://localhost:8080` (Docker Compose):** The default `airweave-frontend` container serves the **production build** from `frontend/dist`, not a live Vite dev server over `frontend/src`. **After you edit frontend source, run `cd frontend && npm run build` so `dist` is updated**; then restart the frontend container if needed so runtime config is re-applied. For day-to-day UI work without rebuilding `dist`, use `npm run dev` on the host instead. If `npm run build` fails on `dist` with permission errors, see `docs/debug/frontend-change-not-effective.md`.
