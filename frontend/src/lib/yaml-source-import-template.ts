@@ -2,6 +2,8 @@
 export const YAML_SOURCE_IMPORT_TEMPLATE = [
     "# Airweave bulk source import — version must be 1.",
     "# Layout: sources.<source_type>.<connection_display_name>: { ...credentials and config... }",
+    "# Optional per-connection key: description (string, max 255). If omitted, defaults to:",
+    '#   "<Source display name> connection for <collection name>" (same as the create UI).',
     "# Supported types: github, gitlab, local_git, dingtalk, confluence",
     "# Replace env-style placeholders and paths/URLs before Validate / Import.",
     "",
@@ -10,6 +12,7 @@ export const YAML_SOURCE_IMPORT_TEMPLATE = [
     "sources:",
     "  github:",
     "    Example GitHub:",
+    "      description: \"Docs repo — engineering handbook\"",
     "      personal_access_token: ${GITHUB_PAT}",
     "      repo_name: owner/repository",
     "      branch: main",

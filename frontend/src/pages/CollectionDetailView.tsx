@@ -43,7 +43,6 @@ import { Search } from '@/search/Search';
 // import { DialogFlow } from '@/components/shared'; // TODO: Implement DialogFlow component
 import { protectedPaths } from "@/constants/paths";
 import { useEntityStateStore } from "@/stores/entityStateStore";
-import { useSidePanelStore } from "@/lib/stores/sidePanelStore";
 import { useCollectionCreationStore } from "@/stores/collectionCreationStore";
 import { redirectWithError } from "@/lib/error-utils";
 import { SingleActionCheckResponse } from "@/types";
@@ -258,9 +257,6 @@ const Collections = () => {
 
     // Entity state store for new architecture
     const entityStateStore = useEntityStateStore();
-
-    // Side panel store
-    const { isOpen: isPanelOpen, openPanel } = useSidePanelStore();
 
     // Collection creation store to track modal state
     const { isOpen: isCreationModalOpen } = useCollectionCreationStore();
@@ -539,14 +535,14 @@ const Collections = () => {
         setSearchParams(next, { replace: true });
     }, [searchParams, setSearchParams, toast]);
 
-    // ** NEW: Refresh connections when panel or creation modal closes, in case a new one was added **
+    // Refresh connections when creation modal closes, in case a new one was added
     useEffect(() => {
-        if (!isPanelOpen && !isCreationModalOpen) {
+        if (!isCreationModalOpen) {
             if (collection?.readable_id) {
                 fetchSourceConnections(collection.readable_id);
             }
         }
-    }, [isPanelOpen, isCreationModalOpen, collection?.readable_id]);
+    }, [isCreationModalOpen, collection?.readable_id]);
 
 
     useEffect(() => {

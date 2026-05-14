@@ -6,6 +6,7 @@ from typing import Any
 import yaml
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from airweave import crud
 from airweave.api.context import ApiContext
 from airweave.domains.source_connections.protocols import SourceConnectionServiceProtocol
 from airweave.domains.sources.protocols import SourceServiceProtocol
@@ -54,6 +55,8 @@ class SourceImportService:
     ) -> SourceImportResponse:
         """Validate or import source connections from YAML."""
         entries = self._parse_yaml(yaml_text)
+        collection = await crud.collection.get_by_readable_id(db, collection_id, ctx)
+        collection_display_name = collection.name
         results: list[SourceImportResultItem] = []
         valid_count = 0
         created_count = 0
@@ -62,12 +65,15 @@ class SourceImportService:
         for entry in entries:
             try:
                 await self._ensure_supported_source(entry.source_type, ctx)
+                source_schema = await self._source_service.get(entry.source_type, ctx)
                 validate_fields(entry.source_type, entry.payload)
                 create_obj = to_source_connection_create(
                     source_type=entry.source_type,
                     name=entry.name,
                     payload=entry.payload,
                     collection_id=collection_id,
+                    source_display_name=source_schema.name,
+                    collection_display_name=collection_display_name,
                 )
                 valid_count += 1
 

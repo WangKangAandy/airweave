@@ -7,6 +7,28 @@ from airweave.schemas.source_connection import DirectAuthentication, SourceConne
 
 from .errors import SourceImportError
 
+RESERVED_CONNECTION_META_FIELDS = frozenset({"description"})
+
+
+def _strip_reserved_meta_fields(payload: dict[str, Any]) -> dict[str, Any]:
+    """Remove keys that are not source-specific credentials/config."""
+    return {k: v for k, v in payload.items() if k not in RESERVED_CONNECTION_META_FIELDS}
+
+
+def resolve_import_connection_description(
+    *,
+    user_value: Any,
+    source_display_name: str,
+    collection_display_name: str,
+) -> str:
+    """Match frontend: optional user text, else ``{source} connection for {collection}``."""
+    if isinstance(user_value, str):
+        stripped = user_value.strip()
+        if stripped:
+            return stripped[:255]
+    base = f"{source_display_name.strip() or 'Source'} connection for {collection_display_name.strip() or 'collection'}"
+    return base[:255]
+
 
 @dataclass(frozen=True)
 class SourceFieldSpec:
@@ -53,7 +75,8 @@ def validate_fields(source_type: str, payload: dict[str, Any]) -> None:
             field="type",
         )
 
-    missing = [field for field in spec.required_fields if field not in payload]
+    payload_for_validation = _strip_reserved_meta_fields(payload)
+    missing = [field for field in spec.required_fields if field not in payload_for_validation]
     if missing:
         raise SourceImportError(
             "MISSING_REQUIRED_FIELD",
@@ -61,7 +84,7 @@ def validate_fields(source_type: str, payload: dict[str, Any]) -> None:
             field=missing[0],
         )
 
-    unknown = sorted(set(payload.keys()) - spec.allowed_fields)
+    unknown = sorted(set(payload_for_validation.keys()) - spec.allowed_fields)
     if unknown:
         raise SourceImportError(
             "INVALID_FIELD",
@@ -76,6 +99,8 @@ def to_source_connection_create(
     name: str,
     payload: dict[str, Any],
     collection_id: str,
+    source_display_name: str,
+    collection_display_name: str,
 ) -> SourceConnectionCreate:
     """Map YAML entry to SourceConnectionCreate."""
     if source_type == "github":
@@ -117,10 +142,17 @@ def to_source_connection_create(
             field="type",
         )
 
+    resolved_description = resolve_import_connection_description(
+        user_value=payload.get("description"),
+        source_display_name=source_display_name,
+        collection_display_name=collection_display_name,
+    )
+
     return SourceConnectionCreate(
         name=name,
         short_name=source_type,
         readable_collection_id=collection_id,
+        description=resolved_description,
         config=config,
         authentication=DirectAuthentication(credentials=auth),
         sync_immediately=True,
