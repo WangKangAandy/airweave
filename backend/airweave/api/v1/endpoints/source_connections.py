@@ -32,7 +32,9 @@ from airweave.core.protocols import EventBus
 from airweave.db.session import get_db
 from airweave.domains.oauth.browser_redirect import post_oauth_browser_return_url
 from airweave.domains.oauth.protocols import OAuthCallbackServiceProtocol
+from airweave.domains.source_import.service import SourceImportService
 from airweave.domains.source_connections.protocols import SourceConnectionServiceProtocol
+from airweave.domains.sources.protocols import SourceServiceProtocol
 from airweave.domains.usage.protocols import UsageLimitCheckerProtocol
 from airweave.domains.usage.types import ActionType
 from airweave.schemas.errors import (
@@ -298,6 +300,39 @@ async def create(
     )
 
     return result
+
+
+@router.post(
+    "/import-yaml",
+    response_model=schemas.SourceImportResponse,
+    summary="Import Source Connections from YAML",
+    description=(
+        "Bulk-validate or import source connections from grouped YAML. "
+        "YAML must include version=1 and grouped sources by type/name."
+    ),
+)
+async def import_yaml(
+    *,
+    db: AsyncSession = Depends(get_db),
+    body: schemas.SourceImportRequest,
+    ctx: ApiContext = Depends(deps.get_context),
+    source_connection_service: SourceConnectionServiceProtocol = Inject(
+        SourceConnectionServiceProtocol
+    ),
+    source_service: SourceServiceProtocol = Inject(SourceServiceProtocol),
+) -> schemas.SourceImportResponse:
+    """Import source connections from YAML without changing core source-connection services."""
+    import_service = SourceImportService(
+        source_connection_service=source_connection_service,
+        source_service=source_service,
+    )
+    return await import_service.import_yaml(
+        db,
+        collection_id=body.collection_id,
+        yaml_text=body.yaml,
+        dry_run=body.dry_run,
+        ctx=ctx,
+    )
 
 
 @router.get(
