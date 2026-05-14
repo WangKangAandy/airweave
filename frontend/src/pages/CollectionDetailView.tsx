@@ -47,11 +47,17 @@ import { useCollectionCreationStore } from "@/stores/collectionCreationStore";
 import { redirectWithError } from "@/lib/error-utils";
 import { SingleActionCheckResponse } from "@/types";
 import { DESIGN_SYSTEM } from "@/lib/design-system";
-import { Textarea } from "@/components/ui/textarea";
 import {
     YAML_SOURCE_IMPORT_TEMPLATE,
     YAML_SOURCE_IMPORT_TEMPLATE_FILENAME,
 } from "@/lib/yaml-source-import-template";
+import {
+    yamlImportLargeModalContentClassName,
+    yamlImportMonoReadonlyClassName,
+    yamlImportMonoScrollRegionForPreClassName,
+    yamlImportMonoScrollRegionForTextareaClassName,
+    yamlImportMonoTextareaClassName,
+} from "@/lib/yaml-import-layout";
 
 
 interface DeleteCollectionDialogProps {
@@ -1520,18 +1526,13 @@ const Collections = () => {
                             }
                         }}
                     >
-                        <DialogContent className="max-w-2xl">
-                            <DialogHeader>
+                        <DialogContent className={yamlImportLargeModalContentClassName}>
+                            <DialogHeader className="shrink-0 px-6 pt-6 pb-3">
                                 <DialogTitle>Import sources from YAML</DialogTitle>
-                                <DialogDescription>
-                                    {
-                                        "Paste YAML using grouped structure sources.<type>.<name>, then validate or import. Use 示例模板 for a full sample covering all supported source types (download or apply to editor)."
-                                    }
-                                </DialogDescription>
                             </DialogHeader>
 
-                            <div className="space-y-3">
-                                <div className="flex items-center justify-between gap-2">
+                            <div className="flex min-h-0 flex-1 flex-col gap-3 px-6 pb-4">
+                                <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
                                     <p className="text-xs text-muted-foreground">
                                         Target collection: <span className="font-mono">{readable_id}</span>
                                     </p>
@@ -1542,7 +1543,7 @@ const Collections = () => {
                                             size="sm"
                                             onClick={() => setShowYamlTemplateDialog(true)}
                                         >
-                                            <FileText className="h-3.5 w-3.5 mr-1.5" />
+                                            <FileText className="mr-1.5 h-3.5 w-3.5" />
                                             示例模板
                                         </Button>
                                         <input
@@ -1558,43 +1559,58 @@ const Collections = () => {
                                             size="sm"
                                             onClick={() => fileInputRef.current?.click()}
                                         >
-                                            <Upload className="h-3.5 w-3.5 mr-1.5" />
+                                            <Upload className="mr-1.5 h-3.5 w-3.5" />
                                             Load file
                                         </Button>
                                     </div>
                                 </div>
-                                <Textarea
-                                    value={yamlText}
-                                    onChange={(e) => setYamlText(e.target.value)}
-                                    placeholder={`version: 1\n\nsources:\n  github:\n    Airweave Main:\n      personal_access_token: \${GITHUB_PAT}\n      repo_name: airweave-ai/airweave`}
-                                    className="min-h-[280px] font-mono text-xs"
-                                />
+
+                                <div className={yamlImportMonoScrollRegionForTextareaClassName}>
+                                    <textarea
+                                        value={yamlText}
+                                        onChange={(e) => setYamlText(e.target.value)}
+                                        spellCheck={false}
+                                        wrap="off"
+                                        autoComplete="off"
+                                        placeholder={`version: 1\n\nsources:\n  github:\n    Airweave Main:\n      personal_access_token: \${GITHUB_PAT}\n      repo_name: airweave-ai/airweave`}
+                                        className={cn(
+                                            yamlImportMonoTextareaClassName,
+                                            "placeholder:text-muted-foreground",
+                                        )}
+                                    />
+                                </div>
+
+                                {yamlImportResult && (
+                                    <div className="max-h-40 shrink-0 space-y-1 overflow-y-auto rounded-md border border-border p-3 text-sm">
+                                        <p>
+                                            Total: {yamlImportResult.summary?.total ?? 0} | Valid:{" "}
+                                            {yamlImportResult.summary?.valid ?? 0} | Created:{" "}
+                                            {yamlImportResult.summary?.created ?? 0} | Failed:{" "}
+                                            {yamlImportResult.summary?.failed ?? 0}
+                                        </p>
+                                        {(yamlImportResult.results ?? [])
+                                            .filter((item) => item.status === "failed")
+                                            .slice(0, 5)
+                                            .map((item) => (
+                                                <p
+                                                    key={`${item.source_type}-${item.name}-${item.index}`}
+                                                    className="text-xs text-destructive"
+                                                >
+                                                    [{item.source_type}] {item.name}: {item.message || "Failed"}
+                                                </p>
+                                            ))}
+                                    </div>
+                                )}
                             </div>
 
-                            {yamlImportResult && (
-                                <div className="rounded-md border border-border p-3 text-sm space-y-1">
-                                    <p>
-                                        Total: {yamlImportResult.summary?.total ?? 0} | Valid: {yamlImportResult.summary?.valid ?? 0} | Created: {yamlImportResult.summary?.created ?? 0} | Failed: {yamlImportResult.summary?.failed ?? 0}
-                                    </p>
-                                    {(yamlImportResult.results ?? [])
-                                        .filter((item) => item.status === "failed")
-                                        .slice(0, 5)
-                                        .map((item) => (
-                                            <p key={`${item.source_type}-${item.name}-${item.index}`} className="text-destructive text-xs">
-                                                [{item.source_type}] {item.name}: {item.message || "Failed"}
-                                            </p>
-                                        ))}
-                                </div>
-                            )}
-
-                            <DialogFooter>
+                            <DialogFooter className="shrink-0 gap-2 border-t border-border px-6 py-4 sm:gap-2">
                                 <Button
                                     type="button"
                                     variant="outline"
                                     onClick={() => runYamlImport(true)}
                                     disabled={isValidatingYaml || isImportingYaml}
                                 >
-                                    {isValidatingYaml ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                                    {isValidatingYaml ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                                     Validate YAML
                                 </Button>
                                 <Button
@@ -1602,7 +1618,7 @@ const Collections = () => {
                                     onClick={() => runYamlImport(false)}
                                     disabled={isValidatingYaml || isImportingYaml}
                                 >
-                                    {isImportingYaml ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                                    {isImportingYaml ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                                     Import Sources
                                 </Button>
                             </DialogFooter>
@@ -1610,8 +1626,8 @@ const Collections = () => {
                     </Dialog>
 
                     <Dialog open={showYamlTemplateDialog} onOpenChange={setShowYamlTemplateDialog}>
-                        <DialogContent className="flex max-h-[90vh] w-[min(96vw,1280px)] max-w-[min(96vw,1280px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(96vw,1280px)]">
-                            <DialogHeader className="px-6 pt-6 pb-3 shrink-0">
+                        <DialogContent className={yamlImportLargeModalContentClassName}>
+                            <DialogHeader className="shrink-0 px-6 pt-6 pb-3">
                                 <DialogTitle>示例模板</DialogTitle>
                                 <DialogDescription>
                                     Full example for YAML bulk import (github, gitlab, local_git, dingtalk,
@@ -1620,21 +1636,16 @@ const Collections = () => {
                                 </DialogDescription>
                             </DialogHeader>
                             <div className="flex min-h-0 flex-1 flex-col gap-3 px-6 pb-4">
-                                <div
-                                    className={cn(
-                                        "max-h-[min(55vh,560px)] min-h-0 overflow-x-auto overflow-y-auto rounded-md border border-border",
-                                        "bg-muted/30",
-                                    )}
-                                >
+                                <div className={yamlImportMonoScrollRegionForPreClassName}>
                                     <pre
-                                        className="m-0 min-w-max p-3 font-mono text-xs whitespace-pre"
+                                        className={yamlImportMonoReadonlyClassName}
                                         tabIndex={0}
                                     >
                                         {YAML_SOURCE_IMPORT_TEMPLATE}
                                     </pre>
                                 </div>
                             </div>
-                            <DialogFooter className="px-6 py-4 border-t border-border shrink-0 gap-2 sm:gap-2">
+                            <DialogFooter className="shrink-0 gap-2 border-t border-border px-6 py-4 sm:gap-2">
                                 <Button
                                     type="button"
                                     variant="outline"

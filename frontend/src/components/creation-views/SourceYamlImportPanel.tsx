@@ -8,7 +8,6 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog";
-import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/lib/theme-provider";
 import { toast } from "@/hooks/use-toast";
@@ -17,6 +16,13 @@ import {
     YAML_SOURCE_IMPORT_TEMPLATE,
     YAML_SOURCE_IMPORT_TEMPLATE_FILENAME,
 } from "@/lib/yaml-source-import-template";
+import {
+    yamlImportLargeModalContentClassName,
+    yamlImportMonoReadonlyClassName,
+    yamlImportMonoScrollRegionForPreClassName,
+    yamlImportMonoScrollRegionForTextareaClassName,
+    yamlImportMonoTextareaClassName,
+} from "@/lib/yaml-import-layout";
 import { FileText, Loader2, Upload } from "lucide-react";
 
 interface SourceImportResponse {
@@ -180,13 +186,8 @@ export const SourceYamlImportPanel: React.FC<SourceYamlImportPanelProps> = ({
                 className
             )}
         >
-            <div className="shrink-0 space-y-2 mb-3">
+            <div className="mb-3 shrink-0 space-y-2">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Import sources from YAML</h3>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                    Paste YAML using grouped structure{" "}
-                    <code className="text-xs bg-muted px-1 rounded">sources.&lt;type&gt;.&lt;name&gt;</code>, then
-                    validate or import. Use 示例模板 for a full sample (download or apply to editor).
-                </p>
                 <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                     <p className="text-xs text-muted-foreground">
                         Target collection: <span className="font-mono">{collectionReadableId}</span>
@@ -211,12 +212,21 @@ export const SourceYamlImportPanel: React.FC<SourceYamlImportPanelProps> = ({
                 </div>
             </div>
 
-            <Textarea
-                value={yamlText}
-                onChange={(e) => setYamlText(e.target.value)}
-                placeholder={`version: 1\n\nsources:\n  github:\n    Airweave Main:\n      personal_access_token: \${GITHUB_PAT}\n      repo_name: airweave-ai/airweave`}
-                className="flex-1 min-h-[240px] font-mono text-xs resize-none"
-            />
+            <div className={yamlImportMonoScrollRegionForTextareaClassName}>
+                <textarea
+                    value={yamlText}
+                    onChange={(e) => setYamlText(e.target.value)}
+                    spellCheck={false}
+                    wrap="off"
+                    autoComplete="off"
+                    placeholder={`version: 1\n\nsources:\n  github:\n    Airweave Main:\n      personal_access_token: \${GITHUB_PAT}\n      repo_name: airweave-ai/airweave`}
+                    className={cn(
+                        yamlImportMonoTextareaClassName,
+                        "placeholder:text-muted-foreground",
+                        isDark ? "text-white placeholder:text-gray-500" : "text-gray-900 placeholder:text-gray-400",
+                    )}
+                />
+            </div>
 
             {yamlImportResult && (
                 <div className="shrink-0 rounded-md border border-border p-3 text-sm space-y-1 mt-3 max-h-32 overflow-y-auto">
@@ -256,8 +266,8 @@ export const SourceYamlImportPanel: React.FC<SourceYamlImportPanelProps> = ({
             </div>
 
             <Dialog open={showYamlTemplateDialog} onOpenChange={setShowYamlTemplateDialog}>
-                <DialogContent className="flex max-h-[90vh] w-[min(96vw,1280px)] max-w-[min(96vw,1280px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(96vw,1280px)]">
-                    <DialogHeader className="px-6 pt-6 pb-3 shrink-0">
+                <DialogContent className={yamlImportLargeModalContentClassName}>
+                    <DialogHeader className="shrink-0 px-6 pt-6 pb-3">
                         <DialogTitle>示例模板</DialogTitle>
                         <DialogDescription>
                             Full example for YAML bulk import (github, gitlab, local_git, dingtalk, confluence).
@@ -265,16 +275,8 @@ export const SourceYamlImportPanel: React.FC<SourceYamlImportPanelProps> = ({
                         </DialogDescription>
                     </DialogHeader>
                     <div className="flex min-h-0 flex-1 flex-col gap-3 px-6 pb-4">
-                        <div
-                            className={cn(
-                                "max-h-[min(55vh,560px)] min-h-0 overflow-x-auto overflow-y-auto rounded-md border border-border",
-                                "bg-muted/30",
-                            )}
-                        >
-                            <pre
-                                className="m-0 min-w-max p-3 font-mono text-xs whitespace-pre"
-                                tabIndex={0}
-                            >
+                        <div className={yamlImportMonoScrollRegionForPreClassName}>
+                            <pre className={yamlImportMonoReadonlyClassName} tabIndex={0}>
                                 {YAML_SOURCE_IMPORT_TEMPLATE}
                             </pre>
                         </div>
