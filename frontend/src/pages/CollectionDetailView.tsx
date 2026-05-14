@@ -1610,7 +1610,7 @@ const Collections = () => {
                     </Dialog>
 
                     <Dialog open={showYamlTemplateDialog} onOpenChange={setShowYamlTemplateDialog}>
-                        <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col gap-0 p-0 overflow-hidden">
+                        <DialogContent className="flex max-h-[90vh] w-[min(96vw,1280px)] max-w-[min(96vw,1280px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(96vw,1280px)]">
                             <DialogHeader className="px-6 pt-6 pb-3 shrink-0">
                                 <DialogTitle>示例模板</DialogTitle>
                                 <DialogDescription>
@@ -1619,15 +1619,15 @@ const Collections = () => {
                                     URLs before validating.
                                 </DialogDescription>
                             </DialogHeader>
-                            <div className="px-6 flex-1 min-h-0 flex flex-col gap-3 pb-4">
+                            <div className="flex min-h-0 flex-1 flex-col gap-3 px-6 pb-4">
                                 <div
                                     className={cn(
-                                        "rounded-md border border-border overflow-y-auto max-h-[50vh]",
+                                        "max-h-[min(55vh,560px)] min-h-0 overflow-x-auto overflow-y-auto rounded-md border border-border",
                                         "bg-muted/30",
                                     )}
                                 >
                                     <pre
-                                        className="p-3 text-xs font-mono whitespace-pre-wrap break-words m-0"
+                                        className="m-0 min-w-max p-3 font-mono text-xs whitespace-pre"
                                         tabIndex={0}
                                     >
                                         {YAML_SOURCE_IMPORT_TEMPLATE}

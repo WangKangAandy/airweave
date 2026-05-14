@@ -161,10 +161,6 @@ class SourceImportService:
         if not isinstance(payload, dict):
             raise SourceImportError("INVALID_SCHEMA", "YAML root must be an object")
 
-        version = payload.get("version")
-        if version != 1:
-            raise SourceImportError("INVALID_VERSION", "version must be 1", field="version")
-
         raw_sources = payload.get("sources")
         if not isinstance(raw_sources, dict):
             raise SourceImportError("INVALID_SCHEMA", "sources must be an object", field="sources")
