@@ -1293,6 +1293,82 @@ const Collections = () => {
                                         )}
                                     </Tooltip>
                                 </TooltipProvider>
+
+                                <TooltipProvider delayDuration={100}>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <div
+                                                className={cn(
+                                                    DESIGN_SYSTEM.buttons.heights.primary,
+                                                    "flex items-center overflow-hidden flex-shrink-0 flex-grow-0 cursor-pointer",
+                                                    DESIGN_SYSTEM.spacing.gaps.standard,
+                                                    DESIGN_SYSTEM.buttons.padding.secondary,
+                                                    "py-2",
+                                                    DESIGN_SYSTEM.radius.button,
+                                                    DESIGN_SYSTEM.transitions.standard,
+                                                    "border",
+                                                    (!sourceConnectionsAllowed || !entitiesAllowed || isCheckingUsage)
+                                                        ? "opacity-50 cursor-not-allowed border-gray-300 dark:border-gray-700"
+                                                        : isDark
+                                                            ? "border-gray-600 bg-gray-900 hover:bg-gray-800"
+                                                            : "border-gray-300 bg-white hover:bg-gray-50"
+                                                )}
+                                                onClick={(!sourceConnectionsAllowed || !entitiesAllowed || isCheckingUsage) ? undefined : handleOpenYamlImport}
+                                            >
+                                                <FileText
+                                                    className={cn(
+                                                        DESIGN_SYSTEM.icons.large,
+                                                        (!sourceConnectionsAllowed || !entitiesAllowed || isCheckingUsage)
+                                                            ? "text-gray-400"
+                                                            : isDark
+                                                                ? "text-gray-300"
+                                                                : "text-gray-600"
+                                                    )}
+                                                    strokeWidth={1.5}
+                                                />
+                                                <span
+                                                    className={cn(
+                                                        DESIGN_SYSTEM.typography.sizes.header,
+                                                        DESIGN_SYSTEM.typography.weights.medium,
+                                                        "text-foreground"
+                                                    )}
+                                                >
+                                                    Import YAML
+                                                </span>
+                                            </div>
+                                        </TooltipTrigger>
+                                        {(!entitiesAllowed || !sourceConnectionsAllowed) && (
+                                            <TooltipContent className="max-w-xs">
+                                                <p className={DESIGN_SYSTEM.typography.sizes.body}>
+                                                    {(!entitiesAllowed && entitiesCheckDetails?.reason === 'usage_limit_exceeded') && (
+                                                        <>Entity processing limit reached.{' '}
+                                                            <a href="/organization/settings?tab=billing" className="underline" onClick={(e) => e.stopPropagation()}>Upgrade your plan</a>
+                                                            {' '}to add new sources.
+                                                        </>
+                                                    )}
+                                                    {(!entitiesAllowed && entitiesCheckDetails?.reason === 'payment_required') && (
+                                                        <>Billing issue detected.{' '}
+                                                            <a href="/organization/settings?tab=billing" className="underline" onClick={(e) => e.stopPropagation()}>Update billing</a>
+                                                            {' '}to add new sources.
+                                                        </>
+                                                    )}
+                                                    {(entitiesAllowed && !sourceConnectionsAllowed && sourceConnectionCheckDetails?.reason === 'usage_limit_exceeded') && (
+                                                        <>Source connection limit reached.{' '}
+                                                            <a href="/organization/settings?tab=billing" className="underline" onClick={(e) => e.stopPropagation()}>Upgrade your plan</a>
+                                                            {' '}for more connections.
+                                                        </>
+                                                    )}
+                                                    {(entitiesAllowed && !sourceConnectionsAllowed && sourceConnectionCheckDetails?.reason === 'payment_required') && (
+                                                        <>Billing issue detected.{' '}
+                                                            <a href="/organization/settings?tab=billing" className="underline" onClick={(e) => e.stopPropagation()}>Update billing</a>
+                                                            {' '}to add new sources.
+                                                        </>
+                                                    )}
+                                                </p>
+                                            </TooltipContent>
+                                        )}
+                                    </Tooltip>
+                                </TooltipProvider>
                             </div>
                         )}
 

@@ -4,6 +4,20 @@ alwaysApply: false
 ---
 # Airweave Frontend Architecture & Guidelines
 
+## Production `dist` and Docker Compose (mandatory for agents)
+
+The default **`airweave-frontend`** Docker Compose service serves the **production build** from `frontend/dist`, not a live Vite dev server over `frontend/src`. `frontend/dist` is **gitignored**; editing `frontend/src/**` alone does not change what that container serves.
+
+**After you modify any file under `frontend/src/`, you MUST** run a production build and report the result before treating the task as done for anyone who verifies the UI at `http://localhost:8080` via Compose:
+
+```bash
+cd frontend && npm run build
+```
+
+If the build fails on writing `dist` (permissions), see `docs/debug/frontend-change-not-effective.md`.
+
+**Exception:** If the user is only iterating with **`npm run dev`** on the host (Vite HMR, e.g. port 8080 outside Docker), rebuilding `dist` is not required—state explicitly which workflow applies.
+
 ## Tech Stack & Core Technologies
 - **React 18** with TypeScript for type-safe component development
 - **Vite** for fast development builds and HMR
