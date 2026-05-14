@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { useTheme } from "@/lib/theme-provider";
 import type { DialogViewProps } from "@/components/types/dialog";
 import { getAppIconUrl } from "@/lib/utils/icons";
+import { copyTextToClipboard } from "@/lib/clipboard";
 
 /**
  * Props for the ConnectionErrorView component
@@ -108,16 +109,14 @@ export const ConnectionErrorView: React.FC<ConnectionErrorViewProps> = ({
     }
 
     // Copy technical details to clipboard
-    const handleCopyDetails = () => {
-        if (displayedDetails) {
-            navigator.clipboard.writeText(displayedDetails);
-            setIsDetailsCopied(true);
-
-            // Reset after animation completes
-            setTimeout(() => {
-                setIsDetailsCopied(false);
-            }, 1500);
-        }
+    const handleCopyDetails = async () => {
+        if (!displayedDetails) return;
+        const ok = await copyTextToClipboard(displayedDetails);
+        if (!ok) return;
+        setIsDetailsCopied(true);
+        setTimeout(() => {
+            setIsDetailsCopied(false);
+        }, 1500);
     };
 
     // IMPORTANT: We do NOT clear error state on component mount
@@ -191,7 +190,7 @@ export const ConnectionErrorView: React.FC<ConnectionErrorViewProps> = ({
                                     <p className="text-xs text-gray-400 font-medium">Technical details:</p>
                                     <button
                                         className="flex items-center text-xs text-gray-400 hover:text-gray-200 focus:outline-none group"
-                                        onClick={handleCopyDetails}
+                                        onClick={() => void handleCopyDetails()}
                                         title="Copy technical details"
                                     >
                                         {isDetailsCopied ? (

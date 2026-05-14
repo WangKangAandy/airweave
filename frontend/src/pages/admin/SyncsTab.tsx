@@ -37,6 +37,7 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import { toast } from 'sonner';
+import { copyTextToClipboard } from '@/lib/clipboard';
 import { SyncConfig, SyncPreset, SYNC_PRESETS, getPresetConfig } from '@/types/sync-config';
 
 interface ScheduleInfo {
@@ -210,9 +211,13 @@ export function SyncsTab() {
         }
     };
 
-    const copyToClipboard = (text: string, label: string) => {
-        navigator.clipboard.writeText(text);
-        toast.success(`${label} copied to clipboard`);
+    const copyToClipboard = async (text: string, label: string) => {
+        const ok = await copyTextToClipboard(text);
+        if (ok) {
+            toast.success(`${label} copied to clipboard`);
+        } else {
+            toast.error('Clipboard access failed');
+        }
     };
 
     const formatNumber = (num: number) => {
@@ -877,7 +882,7 @@ export function SyncsTab() {
                                                                 {sync.id}
                                                             </span>
                                                             <button
-                                                                onClick={() => copyToClipboard(sync.id, 'Sync ID')}
+                                                                onClick={() => void copyToClipboard(sync.id, 'Sync ID')}
                                                                 className="text-muted-foreground hover:text-foreground transition-colors"
                                                             >
                                                                 <Copy className="h-3 w-3" />
@@ -895,7 +900,7 @@ export function SyncsTab() {
                                                                 {sync.organization_id}
                                                             </span>
                                                             <button
-                                                                onClick={() => copyToClipboard(sync.organization_id, 'Organization ID')}
+                                                                onClick={() => void copyToClipboard(sync.organization_id, 'Organization ID')}
                                                                 className="text-muted-foreground hover:text-foreground transition-colors"
                                                             >
                                                                 <Copy className="h-3 w-3" />

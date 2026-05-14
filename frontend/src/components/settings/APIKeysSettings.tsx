@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Key, Copy, Loader2, Plus, Trash2, RotateCw, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
+import { copyTextToClipboard } from "@/lib/clipboard";
 import { format, differenceInDays } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useAPIKeysStore, type APIKey } from "@/lib/stores/apiKeys";
@@ -69,15 +70,15 @@ export function APIKeysSettings() {
     }
   };
 
-  const handleCopyKey = (key: string) => {
-    navigator.clipboard.writeText(key).then(
-      () => {
-        setCopiedKey(key);
-        toast.success("Copied to clipboard");
-        setTimeout(() => setCopiedKey(null), 2000);
-      },
-      () => toast.error("Failed to copy")
-    );
+  const handleCopyKey = async (key: string) => {
+    const ok = await copyTextToClipboard(key);
+    if (ok) {
+      setCopiedKey(key);
+      toast.success("Copied to clipboard");
+      setTimeout(() => setCopiedKey(null), 2000);
+    } else {
+      toast.error("Failed to copy");
+    }
   };
 
   const handleRotateKey = async (apiKey: APIKey) => {
@@ -198,7 +199,7 @@ export function APIKeysSettings() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => handleCopyKey(newlyCreatedKey.decrypted_key)}
+              onClick={() => void handleCopyKey(newlyCreatedKey.decrypted_key)}
               className="h-[34px] gap-2 text-xs bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700"
             >
               {copiedKey === newlyCreatedKey.decrypted_key ? (
@@ -286,7 +287,7 @@ export function APIKeysSettings() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => handleCopyKey(apiKey.decrypted_key)}
+                        onClick={() => void handleCopyKey(apiKey.decrypted_key)}
                         className="h-8 w-8 text-slate-500 hover:text-slate-900 dark:hover:text-slate-100"
                         title="Copy key"
                       >

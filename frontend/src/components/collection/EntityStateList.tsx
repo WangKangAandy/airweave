@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { Plus, FileText, Database, Code, Maximize2, Copy, CheckCircle, ChevronRight, X } from 'lucide-react';
 import { EntityState } from '@/stores/entityStateStore';
 import { apiClient } from '@/lib/api';
+import { copyTextToClipboard } from '@/lib/clipboard';
 import { DESIGN_SYSTEM } from '@/lib/design-system';
 
 // Entity Definition type matching backend schema
@@ -337,10 +338,11 @@ const EntityDetailView: React.FC<{
 }> = ({ entity, isDark, onClose }) => {
   const [copiedSchema, setCopiedSchema] = useState(false);
 
-  const copySchema = () => {
+  const copySchema = async () => {
     if (entity.definition?.entity_schema) {
       const schemaText = JSON.stringify(entity.definition.entity_schema, null, 2);
-      navigator.clipboard.writeText(schemaText);
+      const ok = await copyTextToClipboard(schemaText);
+      if (!ok) return;
       setCopiedSchema(true);
       setTimeout(() => setCopiedSchema(false), 2000);
     }
@@ -432,7 +434,7 @@ const EntityDetailView: React.FC<{
                       DESIGN_SYSTEM.buttons.heights.compact,
                       isDark ? "hover:bg-gray-800" : "hover:bg-white/80"
                     )}
-                    onClick={copySchema}
+                    onClick={() => void copySchema()}
                   >
                     {copiedSchema ? (
                       <CheckCircle className={cn(DESIGN_SYSTEM.icons.inline, "text-green-500")} />

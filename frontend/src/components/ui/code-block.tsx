@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Copy, Check } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { copyTextToClipboard } from "@/lib/clipboard";
 import { Badge } from "@/components/ui/badge";
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { materialOceanic, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
@@ -10,6 +11,8 @@ import { cn } from "@/lib/utils";
 
 interface CodeBlockProps {
   code: string;
+  /** If set, copy uses this string instead of `code` (e.g. JSON only while `code` includes comment placeholders). */
+  copyCode?: string;
   language: string;
   badgeText?: string;
   badgeColor?: string;
@@ -25,6 +28,7 @@ interface CodeBlockProps {
 
 export function CodeBlock({
   code,
+  copyCode,
   language,
   badgeText,
   badgeColor = "bg-blue-600 hover:bg-blue-600",
@@ -59,8 +63,16 @@ export function CodeBlock({
     }
   };
 
-  const handleCopyCode = () => {
-    navigator.clipboard.writeText(code);
+  const handleCopyCode = async () => {
+    const ok = await copyTextToClipboard(copyCode ?? code);
+    if (!ok) {
+      toast({
+        title: "Copy failed",
+        description: "Unable to access the clipboard. Please copy manually.",
+        variant: "destructive",
+      });
+      return;
+    }
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
 

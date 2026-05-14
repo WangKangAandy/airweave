@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useCollectionCreationStore } from '@/stores/collectionCreationStore';
 import { ExternalLink, Copy, Check, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
+import { copyTextToClipboard } from '@/lib/clipboard';
 
 export const OAuthRedirectView: React.FC = () => {
   const {
@@ -19,15 +20,14 @@ export const OAuthRedirectView: React.FC = () => {
   };
 
   const handleCopyUrl = async () => {
-    if (authenticationUrl) {
-      try {
-        await navigator.clipboard.writeText(authenticationUrl);
-        setCopied(true);
-        toast.success('Authentication URL copied to clipboard');
-        setTimeout(() => setCopied(false), 2000);
-      } catch (err) {
-        toast.error('Failed to copy URL');
-      }
+    if (!authenticationUrl) return;
+    const ok = await copyTextToClipboard(authenticationUrl);
+    if (ok) {
+      setCopied(true);
+      toast.success('Authentication URL copied to clipboard');
+      setTimeout(() => setCopied(false), 2000);
+    } else {
+      toast.error('Failed to copy URL');
     }
   };
 

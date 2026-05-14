@@ -3,6 +3,7 @@ import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { Alert } from "@/components/ui/alert";
 import { AlertCircle, Pencil, Trash, Plus, Plug, Copy, Check, Loader2, RotateCw, AlertTriangle, FolderTree, FileText, Upload, Download } from "lucide-react";
 import { apiClient } from "@/lib/api";
+import { copyTextToClipboard } from "@/lib/clipboard";
 import { useUsageStore } from "@/lib/stores/usage";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -761,37 +762,12 @@ const Collections = () => {
         }
     };
 
-    const fallbackCopyText = (value: string): boolean => {
-        const textArea = document.createElement("textarea");
-        textArea.value = value;
-        textArea.setAttribute("readonly", "");
-        textArea.style.position = "fixed";
-        textArea.style.left = "-9999px";
-        document.body.appendChild(textArea);
-        textArea.select();
-        const copied = document.execCommand("copy");
-        document.body.removeChild(textArea);
-        return copied;
-    };
-
     // Handle copy to clipboard
     const handleCopyId = async () => {
         const readableId = collection?.readable_id?.trim();
         if (!readableId) return;
 
-        let copied = false;
-        try {
-            if (navigator.clipboard?.writeText) {
-                await navigator.clipboard.writeText(readableId);
-                copied = true;
-            }
-        } catch {
-            copied = false;
-        }
-
-        if (!copied) {
-            copied = fallbackCopyText(readableId);
-        }
+        const copied = await copyTextToClipboard(readableId);
 
         if (!copied) {
             toast({

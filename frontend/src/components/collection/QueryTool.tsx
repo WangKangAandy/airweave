@@ -1,7 +1,8 @@
 import React, { useState, useRef } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { apiClient, API_CONFIG } from '@/lib/api';
+import { apiClient, getApiBaseUrl } from '@/lib/api';
+import { copyTextToClipboard } from '@/lib/clipboard';
 import { Copy, Check, Braces, SearchCode, TerminalSquare, Clock, AlertCircle, ChevronDown, ChevronRight, Code, Layers } from 'lucide-react';
 import { useTheme } from '@/lib/theme-provider';
 import { cn } from '@/lib/utils';
@@ -85,29 +86,25 @@ export const QueryTool = ({ collectionReadableId }: QueryToolProps) => {
     };
 
     const handleCopyObjects = async () => {
-        try {
-            await navigator.clipboard.writeText(objects);
+        const ok = await copyTextToClipboard(objects);
+        if (ok) {
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
-        } catch (error) {
-            console.error('Failed to copy:', error);
         }
     };
 
     const handleCopyCompletion = async () => {
-        try {
-            await navigator.clipboard.writeText(completion);
+        const ok = await copyTextToClipboard(completion);
+        if (ok) {
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
-        } catch (error) {
-            console.error('Failed to copy:', error);
         }
     };
 
     // Format API URL for display
     const getApiUrl = () => {
         // Extract base URL domain for display, removing protocol
-        const baseUrlDomain = API_CONFIG.baseURL.replace(/^https?:\/\//, '');
+        const baseUrlDomain = getApiBaseUrl().replace(/^https?:\/\//, '');
         const baseUrl = `${baseUrlDomain}/collections/${collectionReadableId || '{collection_id}'}/search`;
         const params = [];
 
@@ -185,7 +182,7 @@ export const QueryTool = ({ collectionReadableId }: QueryToolProps) => {
                                 "h-8 w-8 rounded-none",
                                 isDark ? "text-gray-400 hover:text-gray-300" : "text-gray-500 hover:text-gray-700"
                             )}
-                            onClick={() => navigator.clipboard.writeText(`https://${getApiUrl()}`)}
+                            onClick={() => void copyTextToClipboard(`https://${getApiUrl()}`)}
                         >
                             <Copy className="h-3.5 w-3.5" />
                         </Button>

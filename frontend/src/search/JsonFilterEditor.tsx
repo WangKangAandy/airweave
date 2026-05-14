@@ -3,6 +3,7 @@ import { cn } from '@/lib/utils';
 import { useTheme } from '@/lib/theme-provider';
 import { AlertCircle, CheckCircle2, Copy, Check } from 'lucide-react';
 import { apiClient } from '@/lib/api';
+import { copyTextToClipboard } from '@/lib/clipboard';
 import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
 
@@ -234,19 +235,19 @@ export const JsonFilterEditor: React.FC<JsonFilterEditorProps> = ({
         }, 500);
     }, [validateFilter, onChange]);
 
-    const handleCopy = useCallback(() => {
+    const handleCopy = useCallback(async () => {
         const textToCopy = localValue.trim();
-        if (textToCopy) {
-            navigator.clipboard.writeText(textToCopy);
-            setCopied(true);
+        if (!textToCopy) return;
+        const ok = await copyTextToClipboard(textToCopy);
+        if (!ok) return;
+        setCopied(true);
 
-            if (copyTimeoutRef.current) {
-                clearTimeout(copyTimeoutRef.current);
-            }
-            copyTimeoutRef.current = setTimeout(() => {
-                setCopied(false);
-            }, 2000);
+        if (copyTimeoutRef.current) {
+            clearTimeout(copyTimeoutRef.current);
         }
+        copyTimeoutRef.current = setTimeout(() => {
+            setCopied(false);
+        }, 2000);
     }, [localValue]);
 
     return (

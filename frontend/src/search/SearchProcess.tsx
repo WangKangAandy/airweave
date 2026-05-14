@@ -9,6 +9,7 @@ import { FiLayers, FiFilter, FiSliders, FiBox, FiList, FiClock, FiGitMerge, FiTy
 import type { SearchEvent } from "@/search/types";
 import { DESIGN_SYSTEM } from "@/lib/design-system";
 import { CollapsibleCard } from "@/components/ui/CollapsibleCard";
+import { copyTextToClipboard } from "@/lib/clipboard";
 
 interface SearchProcessProps {
     requestId?: string | null;
@@ -43,7 +44,7 @@ export const SearchProcess: React.FC<SearchProcessProps> = ({ requestId, events,
     // Copy entire process text
     const handleCopyProcess = useCallback(async () => {
         const text = scrollContainerRef.current?.innerText || "";
-        await navigator.clipboard.writeText(text.trim());
+        await copyTextToClipboard(text.trim());
     }, []);
 
     // Pretty-print helper: hide internal system prefix in keys for display only
@@ -70,12 +71,10 @@ export const SearchProcess: React.FC<SearchProcessProps> = ({ requestId, events,
     const JsonBlock: React.FC<{ value: string; isDark: boolean }> = ({ value, isDark }) => {
         const [copiedLocal, setCopiedLocal] = useState(false);
         const handleCopy = useCallback(async () => {
-            try {
-                await navigator.clipboard.writeText(value);
+            const ok = await copyTextToClipboard(value);
+            if (ok) {
                 setCopiedLocal(true);
                 setTimeout(() => setCopiedLocal(false), 1500);
-            } catch {
-                // noop
             }
         }, [value]);
 
@@ -154,12 +153,10 @@ export const SearchProcess: React.FC<SearchProcessProps> = ({ requestId, events,
     // Copy handler for request id
     const handleCopyId = useCallback(async () => {
         if (!requestId) return;
-        try {
-            await navigator.clipboard.writeText(requestId);
+        const ok = await copyTextToClipboard(requestId);
+        if (ok) {
             setCopied(true);
             setTimeout(() => setCopied(false), 1500);
-        } catch {
-            // noop
         }
     }, [requestId]);
 
