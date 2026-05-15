@@ -54,7 +54,25 @@ Add to your MCP client configuration (e.g., Claude Desktop, Cursor, OpenClaw):
 | `AIRWEAVE_BASE_URL` | No | API base URL (default: https://api.airweave.ai) |
 | `AIRWEAVE_ORGANIZATION_ID` | No | Organization ID for multi-tenant |
 
-## Tool: `musa_search`
+## Tools
+
+### `list-collection-sources`
+
+List connections in the configured collection (names, types, entity counts, filter hints).
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `format` | markdown | `markdown` or `json` |
+| `includeDetails` | false | Fetch per-connection details (descriptions, safe config, sync_id) |
+| `refresh` | false | Bypass cache (default TTL 120s, override with `MUSA_SOURCE_LIST_CACHE_TTL_MS`) |
+
+Call this before `musa_search` when you need source-specific filters. Filter hints use `airweave_system_metadata.source_name` (= source **type** / `short_name`).
+
+### `get-config`
+
+Lightweight server configuration summary (collection, base URL, available tools).
+
+### `musa_search`
 
 Search the MUSA knowledge base.
 

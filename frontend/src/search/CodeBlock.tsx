@@ -196,7 +196,7 @@ console.log(response.results${tier === "agentic" ? ", response.answer" : ""});`;
             mcpServers: {
                 [`airweave-${collectionReadableId}`]: {
                     command: "npx",
-                    args: ["musa-knowledge-search"],
+                    args: ["-y", "musa-knowledge-search"],
                     env: {
                         AIRWEAVE_API_KEY: apiKey,
                         AIRWEAVE_COLLECTION: collectionReadableId,

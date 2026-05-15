@@ -51,6 +51,10 @@ class AirweaveSystemMetadata(BaseModel):
     """
 
     # Set during early enrichment
+    # TODO(platform): Rename semantically to source_type (connector short_name, e.g. "github").
+    # Today source_name stores source type, not connection display name. Add source_connection_name
+    # for filter-by-connection; expose source_type in search API + filter alias; keep source_name
+    # as deprecated alias until major version. See sync_pipeline entity _enrich_early_metadata.
     source_name: Optional[str] = Field(
         None, description="Name of the source this entity belongs to."
     )

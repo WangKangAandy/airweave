@@ -33,6 +33,8 @@ class FilterableField(str, Enum):
 
     # System metadata fields
     SYSTEM_METADATA_ENTITY_TYPE = "airweave_system_metadata.entity_type"
+    # TODO(search-api): Add SYSTEM_METADATA_SOURCE_TYPE alias mapping to the same Vespa field;
+    # document source_name as deprecated (holds connector short_name, not connection display name).
     SYSTEM_METADATA_SOURCE_NAME = "airweave_system_metadata.source_name"
     SYSTEM_METADATA_ORIGINAL_ENTITY_ID = "airweave_system_metadata.original_entity_id"
     SYSTEM_METADATA_CHUNK_INDEX = "airweave_system_metadata.chunk_index"

@@ -170,7 +170,7 @@ await client.collections.searchCollection("${collectionReadableId}", {
             mcpServers: {
                 [`airweave-${collectionReadableId}`]: {
                     command: "npx",
-                    args: ["musa-knowledge-search"],
+                    args: ["-y", "musa-knowledge-search"],
                     env: {
                         AIRWEAVE_API_KEY: apiKey,
                         AIRWEAVE_COLLECTION: collectionReadableId,
@@ -187,7 +187,7 @@ await client.collections.searchCollection("${collectionReadableId}", {
 npm install -g musa-knowledge-search@1.0.7
 
 # Or run directly with npx
-npx musa-knowledge-search`;
+npx -y musa-knowledge-search`;
 
         const cliSnippet =
             `# Set environment variables
