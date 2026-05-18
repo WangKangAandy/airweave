@@ -529,6 +529,8 @@ const searchDescription = [
   "Tiers: `instant` (~1s), `classic` (default, ~2-5s), `agentic` (~10-30s).",
   "",
   "Filters: use hints from `list-collection-sources`; see the `filter` parameter schema for field names.",
+  "",
+  "If the user-facing answer uses chunks from these results, end with a brief \"References\" list of only what you used (name/title; web_url when present). Otherwise omit.",
 ].join("\n");
 
 server.tool(
