@@ -1,12 +1,12 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, type ChangeEvent } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { Alert } from "@/components/ui/alert";
-import { AlertCircle, Pencil, Trash, Plus, Plug, Copy, Check, Loader2, RotateCw, AlertTriangle, FolderTree } from "lucide-react";
+import { AlertCircle, Pencil, Trash, Plus, Plug, Copy, Check, Loader2, RotateCw, AlertTriangle, FolderTree, FileText, Upload, Download } from "lucide-react";
 import { apiClient } from "@/lib/api";
+import { copyTextToClipboard } from "@/lib/clipboard";
 import { useUsageStore } from "@/lib/stores/usage";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/use-toast";
 import { getAppIconUrl } from "@/lib/utils/icons";
 import { useTheme } from "@/lib/theme-provider";
@@ -28,39 +28,52 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
 import SourceConnectionStateView from "@/components/collection/SourceConnectionStateView";
 import { emitCollectionEvent, onCollectionEvent, COLLECTION_DELETED, SOURCE_CONNECTION_UPDATED } from "@/lib/events";
 import { Search } from '@/search/Search';
 // import { DialogFlow } from '@/components/shared'; // TODO: Implement DialogFlow component
 import { protectedPaths } from "@/constants/paths";
 import { useEntityStateStore } from "@/stores/entityStateStore";
-import { useSidePanelStore } from "@/lib/stores/sidePanelStore";
 import { useCollectionCreationStore } from "@/stores/collectionCreationStore";
 import { redirectWithError } from "@/lib/error-utils";
 import { SingleActionCheckResponse } from "@/types";
 import { DESIGN_SYSTEM } from "@/lib/design-system";
+import {
+    YAML_SOURCE_IMPORT_TEMPLATE,
+    YAML_SOURCE_IMPORT_TEMPLATE_FILENAME,
+} from "@/lib/yaml-source-import-template";
+import {
+    yamlImportLargeModalContentClassName,
+    yamlImportMonoReadonlyClassName,
+    yamlImportMonoScrollRegionForPreClassName,
+    yamlImportMonoScrollRegionForTextareaClassName,
+    yamlImportMonoTextareaClassName,
+} from "@/lib/yaml-import-layout";
 
 
 interface DeleteCollectionDialogProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     onConfirm: () => void;
-    collectionReadableId: string;
-    confirmText: string;
-    setConfirmText: (text: string) => void;
+    isDeleting?: boolean;
 }
 
 const DeleteCollectionDialog = ({
     open,
     onOpenChange,
     onConfirm,
-    collectionReadableId,
-    confirmText,
-    setConfirmText
+    isDeleting = false,
 }: DeleteCollectionDialogProps) => {
     const { resolvedTheme } = useTheme();
     const isDark = resolvedTheme === 'dark';
-    const isConfirmValid = confirmText === collectionReadableId;
 
     return (
         <AlertDialog open={open} onOpenChange={onOpenChange}>
@@ -106,61 +119,19 @@ const DeleteCollectionDialog = ({
                             </ul>
                         </div>
 
-                        {/* Confirmation input */}
-                        <div className="space-y-3">
-                            <div>
-                                <label htmlFor="confirm-delete" className="text-sm font-medium text-foreground block mb-2">
-                                    Type <span className="font-mono font-semibold text-destructive bg-destructive/10 px-1.5 py-0.5 rounded">
-                                        {collectionReadableId}
-                                    </span> to confirm deletion
-                                </label>
-                                <Input
-                                    id="confirm-delete"
-                                    value={confirmText}
-                                    onChange={(e) => setConfirmText(e.target.value)}
-                                    className={cn(
-                                        "w-full transition-colors",
-                                        isConfirmValid && confirmText.length > 0
-                                            ? "border-green-500 focus:border-green-500 focus:ring-green-500/20"
-                                            : confirmText.length > 0
-                                                ? "border-destructive focus:border-destructive focus:ring-destructive/20"
-                                                : ""
-                                    )}
-                                    placeholder={collectionReadableId}
-                                />
-                            </div>
-
-                            {/* Validation feedback */}
-                            {confirmText.length > 0 && (
-                                <div className="flex items-center gap-2 text-sm">
-                                    {isConfirmValid ? (
-                                        <>
-                                            <Check className="w-4 h-4 text-green-500" />
-                                            <span className="text-green-600 dark:text-green-400">
-                                                Confirmation matches
-                                            </span>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <AlertCircle className="w-4 h-4 text-destructive" />
-                                            <span className="text-destructive">
-                                                Confirmation does not match
-                                            </span>
-                                        </>
-                                    )}
-                                </div>
-                            )}
-                        </div>
+                        <p className="text-sm text-muted-foreground">
+                            Please confirm only if you are sure.
+                        </p>
                     </AlertDialogDescription>
                 </AlertDialogHeader>
 
                 <AlertDialogFooter className="gap-3">
-                    <AlertDialogCancel className="flex-1">
+                    <AlertDialogCancel className="flex-1" disabled={isDeleting}>
                         Cancel
                     </AlertDialogCancel>
                     <AlertDialogAction
                         onClick={onConfirm}
-                        disabled={!isConfirmValid}
+                        disabled={isDeleting}
                         className={cn(
                             "flex-1 bg-destructive text-destructive-foreground hover:bg-destructive/90",
                             "disabled:opacity-50 disabled:cursor-not-allowed",
@@ -168,7 +139,7 @@ const DeleteCollectionDialog = ({
                         )}
                     >
                         <Trash className="w-4 h-4 mr-2" />
-                        Delete Collection
+                        {isDeleting ? "Deleting..." : "Delete Collection"}
                     </AlertDialogAction>
                 </AlertDialogFooter>
             </AlertDialogContent>
@@ -215,6 +186,22 @@ interface SourceConnection {
     federated_search?: boolean;  // Whether this source uses federated search
 }
 
+interface SourceImportResponse {
+    summary?: {
+        total?: number;
+        valid?: number;
+        created?: number;
+        failed?: number;
+    };
+    results?: Array<{
+        index: number;
+        source_type: string;
+        name: string;
+        status: string;
+        message?: string;
+    }>;
+}
+
 const Collections = () => {
     /********************************************
      * COMPONENT STATE
@@ -228,9 +215,6 @@ const Collections = () => {
 
     // Entity state store for new architecture
     const entityStateStore = useEntityStateStore();
-
-    // Side panel store
-    const { isOpen: isPanelOpen, openPanel } = useSidePanelStore();
 
     // Collection creation store to track modal state
     const { isOpen: isCreationModalOpen } = useCollectionCreationStore();
@@ -251,7 +235,6 @@ const Collections = () => {
 
     // Add state for delete dialog
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-    const [confirmText, setConfirmText] = useState('');
     const [isDeleting, setIsDeleting] = useState(false);
 
     // Add state for copy animation
@@ -263,6 +246,13 @@ const Collections = () => {
 
     // Browse tree capability for selected connection
     const [selectedScSupportsBrowseTree, setSelectedScSupportsBrowseTree] = useState(false);
+    const [showYamlImportDialog, setShowYamlImportDialog] = useState(false);
+    const [showYamlTemplateDialog, setShowYamlTemplateDialog] = useState(false);
+    const [yamlText, setYamlText] = useState("");
+    const [isValidatingYaml, setIsValidatingYaml] = useState(false);
+    const [isImportingYaml, setIsImportingYaml] = useState(false);
+    const [yamlImportResult, setYamlImportResult] = useState<SourceImportResponse | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Usage check from store (read-only, checking happens at app level)
     const actionChecks = useUsageStore(state => state.actionChecks);
@@ -502,14 +492,14 @@ const Collections = () => {
         setSearchParams(next, { replace: true });
     }, [searchParams, setSearchParams, toast]);
 
-    // ** NEW: Refresh connections when panel or creation modal closes, in case a new one was added **
+    // Refresh connections when creation modal closes, in case a new one was added
     useEffect(() => {
-        if (!isPanelOpen && !isCreationModalOpen) {
+        if (!isCreationModalOpen) {
             if (collection?.readable_id) {
                 fetchSourceConnections(collection.readable_id);
             }
         }
-    }, [isPanelOpen, isCreationModalOpen, collection?.readable_id]);
+    }, [isCreationModalOpen, collection?.readable_id]);
 
 
     useEffect(() => {
@@ -543,6 +533,125 @@ const Collections = () => {
             const store = useCollectionCreationStore.getState();
             store.openForAddToCollection(collection.readable_id, collection.name);
         }
+    };
+
+    const handleOpenYamlImport = () => {
+        setYamlImportResult(null);
+        setShowYamlImportDialog(true);
+    };
+
+    const runYamlImport = async (dryRun: boolean) => {
+        if (!readable_id) return;
+        if (!yamlText.trim()) {
+            toast({
+                title: "YAML is required",
+                description: "Please paste YAML content before continuing.",
+                variant: "destructive",
+            });
+            return;
+        }
+
+        if (dryRun) {
+            setIsValidatingYaml(true);
+        } else {
+            setIsImportingYaml(true);
+        }
+
+        try {
+            const response = await apiClient.post("/source-connections/import-yaml", {
+                collection_id: readable_id,
+                yaml: yamlText,
+                dry_run: dryRun,
+            });
+
+            let payload: SourceImportResponse | null = null;
+            try {
+                payload = await response.json();
+            } catch {
+                payload = null;
+            }
+
+            if (!response.ok) {
+                const detail = (payload as any)?.detail || `Request failed (HTTP ${response.status})`;
+                throw new Error(String(detail));
+            }
+
+            if (payload) {
+                setYamlImportResult(payload);
+            }
+
+            if (dryRun) {
+                toast({
+                    title: "YAML validated",
+                    description: "Validation completed. Review results before importing.",
+                });
+            } else {
+                const created = payload?.summary?.created ?? 0;
+                const failed = payload?.summary?.failed ?? 0;
+                toast({
+                    title: "YAML import completed",
+                    description: `Created ${created} source(s), failed ${failed}.`,
+                    variant: failed > 0 ? "destructive" : "default",
+                });
+                await fetchSourceConnections(readable_id);
+            }
+        } catch (error) {
+            toast({
+                title: dryRun ? "Validation failed" : "Import failed",
+                description: error instanceof Error ? error.message : String(error),
+                variant: "destructive",
+            });
+        } finally {
+            setIsValidatingYaml(false);
+            setIsImportingYaml(false);
+        }
+    };
+
+    const handleYamlFileSelected = async (event: ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+        try {
+            const content = await file.text();
+            setYamlText(content);
+            toast({
+                title: "YAML loaded",
+                description: `${file.name} has been loaded into the editor.`,
+            });
+        } catch {
+            toast({
+                title: "Failed to read file",
+                description: "Please try again with a valid .yaml/.yml file.",
+                variant: "destructive",
+            });
+        } finally {
+            event.target.value = "";
+        }
+    };
+
+    const handleDownloadYamlTemplate = () => {
+        const blob = new Blob([YAML_SOURCE_IMPORT_TEMPLATE], {
+            type: "text/yaml;charset=utf-8",
+        });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = YAML_SOURCE_IMPORT_TEMPLATE_FILENAME;
+        anchor.rel = "noopener";
+        anchor.click();
+        URL.revokeObjectURL(url);
+        toast({
+            title: "Download started",
+            description: YAML_SOURCE_IMPORT_TEMPLATE_FILENAME,
+        });
+    };
+
+    const handleApplyYamlTemplateToEditor = () => {
+        setYamlText(YAML_SOURCE_IMPORT_TEMPLATE);
+        setShowYamlTemplateDialog(false);
+        toast({
+            title: "Template applied",
+            description: "The example YAML has been copied into the editor. Replace placeholders before importing.",
+        });
     };
 
     const handleSelectConnection = (connection: SourceConnection) => {
@@ -606,37 +715,12 @@ const Collections = () => {
         }
     };
 
-    const fallbackCopyText = (value: string): boolean => {
-        const textArea = document.createElement("textarea");
-        textArea.value = value;
-        textArea.setAttribute("readonly", "");
-        textArea.style.position = "fixed";
-        textArea.style.left = "-9999px";
-        document.body.appendChild(textArea);
-        textArea.select();
-        const copied = document.execCommand("copy");
-        document.body.removeChild(textArea);
-        return copied;
-    };
-
     // Handle copy to clipboard
     const handleCopyId = async () => {
         const readableId = collection?.readable_id?.trim();
         if (!readableId) return;
 
-        let copied = false;
-        try {
-            if (navigator.clipboard?.writeText) {
-                await navigator.clipboard.writeText(readableId);
-                copied = true;
-            }
-        } catch {
-            copied = false;
-        }
-
-        if (!copied) {
-            copied = fallbackCopyText(readableId);
-        }
+        const copied = await copyTextToClipboard(readableId);
 
         if (!copied) {
             toast({
@@ -689,7 +773,7 @@ const Collections = () => {
 
     // Handle collection deletion
     const handleDeleteCollection = async () => {
-        if (!readable_id || confirmText !== readable_id) return;
+        if (!readable_id) return;
 
         setIsDeleting(true);
         try {
@@ -719,7 +803,6 @@ const Collections = () => {
         } finally {
             setIsDeleting(false);
             setShowDeleteDialog(false);
-            setConfirmText(''); // Reset confirm text
         }
     };
 
@@ -1138,6 +1221,82 @@ const Collections = () => {
                                         )}
                                     </Tooltip>
                                 </TooltipProvider>
+
+                                <TooltipProvider delayDuration={100}>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <div
+                                                className={cn(
+                                                    DESIGN_SYSTEM.buttons.heights.primary,
+                                                    "flex items-center overflow-hidden flex-shrink-0 flex-grow-0 cursor-pointer",
+                                                    DESIGN_SYSTEM.spacing.gaps.standard,
+                                                    DESIGN_SYSTEM.buttons.padding.secondary,
+                                                    "py-2",
+                                                    DESIGN_SYSTEM.radius.button,
+                                                    DESIGN_SYSTEM.transitions.standard,
+                                                    "border",
+                                                    (!sourceConnectionsAllowed || !entitiesAllowed || isCheckingUsage)
+                                                        ? "opacity-50 cursor-not-allowed border-gray-300 dark:border-gray-700"
+                                                        : isDark
+                                                            ? "border-gray-600 bg-gray-900 hover:bg-gray-800"
+                                                            : "border-gray-300 bg-white hover:bg-gray-50"
+                                                )}
+                                                onClick={(!sourceConnectionsAllowed || !entitiesAllowed || isCheckingUsage) ? undefined : handleOpenYamlImport}
+                                            >
+                                                <FileText
+                                                    className={cn(
+                                                        DESIGN_SYSTEM.icons.large,
+                                                        (!sourceConnectionsAllowed || !entitiesAllowed || isCheckingUsage)
+                                                            ? "text-gray-400"
+                                                            : isDark
+                                                                ? "text-gray-300"
+                                                                : "text-gray-600"
+                                                    )}
+                                                    strokeWidth={1.5}
+                                                />
+                                                <span
+                                                    className={cn(
+                                                        DESIGN_SYSTEM.typography.sizes.header,
+                                                        DESIGN_SYSTEM.typography.weights.medium,
+                                                        "text-foreground"
+                                                    )}
+                                                >
+                                                    Import YAML
+                                                </span>
+                                            </div>
+                                        </TooltipTrigger>
+                                        {(!entitiesAllowed || !sourceConnectionsAllowed) && (
+                                            <TooltipContent className="max-w-xs">
+                                                <p className={DESIGN_SYSTEM.typography.sizes.body}>
+                                                    {(!entitiesAllowed && entitiesCheckDetails?.reason === 'usage_limit_exceeded') && (
+                                                        <>Entity processing limit reached.{' '}
+                                                            <a href="/organization/settings?tab=billing" className="underline" onClick={(e) => e.stopPropagation()}>Upgrade your plan</a>
+                                                            {' '}to add new sources.
+                                                        </>
+                                                    )}
+                                                    {(!entitiesAllowed && entitiesCheckDetails?.reason === 'payment_required') && (
+                                                        <>Billing issue detected.{' '}
+                                                            <a href="/organization/settings?tab=billing" className="underline" onClick={(e) => e.stopPropagation()}>Update billing</a>
+                                                            {' '}to add new sources.
+                                                        </>
+                                                    )}
+                                                    {(entitiesAllowed && !sourceConnectionsAllowed && sourceConnectionCheckDetails?.reason === 'usage_limit_exceeded') && (
+                                                        <>Source connection limit reached.{' '}
+                                                            <a href="/organization/settings?tab=billing" className="underline" onClick={(e) => e.stopPropagation()}>Upgrade your plan</a>
+                                                            {' '}for more connections.
+                                                        </>
+                                                    )}
+                                                    {(entitiesAllowed && !sourceConnectionsAllowed && sourceConnectionCheckDetails?.reason === 'payment_required') && (
+                                                        <>Billing issue detected.{' '}
+                                                            <a href="/organization/settings?tab=billing" className="underline" onClick={(e) => e.stopPropagation()}>Update billing</a>
+                                                            {' '}to add new sources.
+                                                        </>
+                                                    )}
+                                                </p>
+                                            </TooltipContent>
+                                        )}
+                                    </Tooltip>
+                                </TooltipProvider>
                             </div>
                         )}
 
@@ -1176,29 +1335,51 @@ const Collections = () => {
                                 <TooltipProvider delayDuration={100}>
                                     <Tooltip>
                                         <TooltipTrigger asChild>
-                                            <span tabIndex={0}>
-                                                <button
-                                                    type="button"
-                                                    className={cn(
-                                                        "inline-flex items-center justify-center",
-                                                        "h-9 px-4 py-2",
-                                                        "text-sm font-medium",
-                                                        "rounded-md",
-                                                        "transition-all duration-200",
-                                                        "border",
-                                                        (!sourceConnectionsAllowed || !entitiesAllowed || isCheckingUsage)
-                                                            ? "opacity-50 cursor-not-allowed border-gray-300 bg-gray-100 text-gray-400"
-                                                            : isDark
-                                                                ? "border-blue-500 bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 hover:border-blue-400"
-                                                                : "border-blue-500 bg-blue-50 text-blue-600 hover:bg-blue-100 hover:border-blue-600"
-                                                    )}
-                                                    onClick={(!sourceConnectionsAllowed || !entitiesAllowed || isCheckingUsage) ? undefined : handleAddSource}
-                                                    disabled={!sourceConnectionsAllowed || !entitiesAllowed || isCheckingUsage}
-                                                >
-                                                    <Plus className="h-4 w-4 mr-1.5" strokeWidth={2} />
-                                                    Connect a source
-                                                </button>
-                                            </span>
+                                            <div className="flex items-center gap-3">
+                                                <span tabIndex={0}>
+                                                    <button
+                                                        type="button"
+                                                        className={cn(
+                                                            "inline-flex items-center justify-center",
+                                                            "h-9 px-4 py-2",
+                                                            "text-sm font-medium",
+                                                            "rounded-md",
+                                                            "transition-all duration-200",
+                                                            "border",
+                                                            (!sourceConnectionsAllowed || !entitiesAllowed || isCheckingUsage)
+                                                                ? "opacity-50 cursor-not-allowed border-gray-300 bg-gray-100 text-gray-400"
+                                                                : isDark
+                                                                    ? "border-blue-500 bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 hover:border-blue-400"
+                                                                    : "border-blue-500 bg-blue-50 text-blue-600 hover:bg-blue-100 hover:border-blue-600"
+                                                        )}
+                                                        onClick={(!sourceConnectionsAllowed || !entitiesAllowed || isCheckingUsage) ? undefined : handleAddSource}
+                                                        disabled={!sourceConnectionsAllowed || !entitiesAllowed || isCheckingUsage}
+                                                    >
+                                                        <Plus className="h-4 w-4 mr-1.5" strokeWidth={2} />
+                                                        Connect a source
+                                                    </button>
+                                                </span>
+                                                <span tabIndex={0}>
+                                                    <button
+                                                        type="button"
+                                                        className={cn(
+                                                            "inline-flex items-center justify-center",
+                                                            "h-9 px-4 py-2",
+                                                            "text-sm font-medium rounded-md border transition-all duration-200",
+                                                            (!sourceConnectionsAllowed || !entitiesAllowed || isCheckingUsage)
+                                                                ? "opacity-50 cursor-not-allowed border-gray-300 bg-gray-100 text-gray-400"
+                                                                : isDark
+                                                                    ? "border-gray-600 bg-gray-800 text-gray-200 hover:bg-gray-700"
+                                                                    : "border-gray-300 bg-white text-gray-700 hover:bg-gray-100"
+                                                        )}
+                                                        onClick={(!sourceConnectionsAllowed || !entitiesAllowed || isCheckingUsage) ? undefined : handleOpenYamlImport}
+                                                        disabled={!sourceConnectionsAllowed || !entitiesAllowed || isCheckingUsage}
+                                                    >
+                                                        <FileText className="h-4 w-4 mr-1.5" strokeWidth={2} />
+                                                        Import YAML
+                                                    </button>
+                                                </span>
+                                            </div>
                                         </TooltipTrigger>
                                         {(!entitiesAllowed || !sourceConnectionsAllowed) && (
                                             <TooltipContent className="max-w-xs">
@@ -1281,10 +1462,159 @@ const Collections = () => {
                         open={showDeleteDialog}
                         onOpenChange={setShowDeleteDialog}
                         onConfirm={handleDeleteCollection}
-                        collectionReadableId={collection?.readable_id || ''}
-                        confirmText={confirmText}
-                        setConfirmText={setConfirmText}
+                        isDeleting={isDeleting}
                     />
+
+                    <Dialog
+                        open={showYamlImportDialog}
+                        onOpenChange={(open) => {
+                            setShowYamlImportDialog(open);
+                            if (!open) {
+                                setShowYamlTemplateDialog(false);
+                            }
+                        }}
+                    >
+                        <DialogContent className={yamlImportLargeModalContentClassName}>
+                            <DialogHeader className="shrink-0 px-6 pt-6 pb-3">
+                                <DialogTitle>Import sources from YAML</DialogTitle>
+                            </DialogHeader>
+
+                            <div className="flex min-h-0 flex-1 flex-col gap-3 px-6 pb-4">
+                                <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
+                                    <p className="text-xs text-muted-foreground">
+                                        Target collection: <span className="font-mono">{readable_id}</span>
+                                    </p>
+                                    <div className="flex flex-wrap items-center justify-end gap-2">
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => setShowYamlTemplateDialog(true)}
+                                        >
+                                            <FileText className="mr-1.5 h-3.5 w-3.5" />
+                                            示例模板
+                                        </Button>
+                                        <input
+                                            ref={fileInputRef}
+                                            type="file"
+                                            accept=".yaml,.yml,text/yaml,text/x-yaml"
+                                            className="hidden"
+                                            onChange={handleYamlFileSelected}
+                                        />
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => fileInputRef.current?.click()}
+                                        >
+                                            <Upload className="mr-1.5 h-3.5 w-3.5" />
+                                            Load file
+                                        </Button>
+                                    </div>
+                                </div>
+
+                                <div className={yamlImportMonoScrollRegionForTextareaClassName}>
+                                    <textarea
+                                        value={yamlText}
+                                        onChange={(e) => setYamlText(e.target.value)}
+                                        spellCheck={false}
+                                        wrap="off"
+                                        autoComplete="off"
+                                        placeholder={`version: 1\n\nsources:\n  github:\n    Airweave Main:\n      personal_access_token: \${GITHUB_PAT}\n      repo_name: airweave-ai/airweave`}
+                                        className={cn(
+                                            yamlImportMonoTextareaClassName,
+                                            "placeholder:text-muted-foreground",
+                                        )}
+                                    />
+                                </div>
+
+                                {yamlImportResult && (
+                                    <div className="max-h-40 shrink-0 space-y-1 overflow-y-auto rounded-md border border-border p-3 text-sm">
+                                        <p>
+                                            Total: {yamlImportResult.summary?.total ?? 0} | Valid:{" "}
+                                            {yamlImportResult.summary?.valid ?? 0} | Created:{" "}
+                                            {yamlImportResult.summary?.created ?? 0} | Failed:{" "}
+                                            {yamlImportResult.summary?.failed ?? 0}
+                                        </p>
+                                        {(yamlImportResult.results ?? [])
+                                            .filter((item) => item.status === "failed")
+                                            .slice(0, 5)
+                                            .map((item) => (
+                                                <p
+                                                    key={`${item.source_type}-${item.name}-${item.index}`}
+                                                    className="text-xs text-destructive"
+                                                >
+                                                    [{item.source_type}] {item.name}: {item.message || "Failed"}
+                                                </p>
+                                            ))}
+                                    </div>
+                                )}
+                            </div>
+
+                            <DialogFooter className="shrink-0 gap-2 border-t border-border px-6 py-4 sm:gap-2">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => runYamlImport(true)}
+                                    disabled={isValidatingYaml || isImportingYaml}
+                                >
+                                    {isValidatingYaml ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                    Validate YAML
+                                </Button>
+                                <Button
+                                    type="button"
+                                    onClick={() => runYamlImport(false)}
+                                    disabled={isValidatingYaml || isImportingYaml}
+                                >
+                                    {isImportingYaml ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                    Import Sources
+                                </Button>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
+
+                    <Dialog open={showYamlTemplateDialog} onOpenChange={setShowYamlTemplateDialog}>
+                        <DialogContent className={yamlImportLargeModalContentClassName}>
+                            <DialogHeader className="shrink-0 px-6 pt-6 pb-3">
+                                <DialogTitle>示例模板</DialogTitle>
+                                <DialogDescription>
+                                    Full example for YAML bulk import (github, gitlab, local_git, dingtalk,
+                                    confluence). Download the file or apply to the editor, then replace secrets and
+                                    URLs before validating.
+                                </DialogDescription>
+                            </DialogHeader>
+                            <div className="flex min-h-0 flex-1 flex-col gap-3 px-6 pb-4">
+                                <div className={yamlImportMonoScrollRegionForPreClassName}>
+                                    <pre
+                                        className={yamlImportMonoReadonlyClassName}
+                                        tabIndex={0}
+                                    >
+                                        {YAML_SOURCE_IMPORT_TEMPLATE}
+                                    </pre>
+                                </div>
+                            </div>
+                            <DialogFooter className="shrink-0 gap-2 border-t border-border px-6 py-4 sm:gap-2">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => setShowYamlTemplateDialog(false)}
+                                >
+                                    Close
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={handleDownloadYamlTemplate}
+                                >
+                                    <Download className="h-4 w-4 mr-2" />
+                                    Download .yaml
+                                </Button>
+                                <Button type="button" onClick={handleApplyYamlTemplateToEditor}>
+                                    Apply to editor
+                                </Button>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
 
                 </>
             )}

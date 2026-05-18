@@ -46,8 +46,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { SingleActionCheckResponse } from "@/types";
-import { SidePanelFlow } from "@/components/shared/SidePanelFlow"; // Import the new SidePanel
-import { useSidePanelStore } from "@/lib/stores/sidePanelStore"; // Import the new store
 import { useCollectionCreationStore } from "@/stores/collectionCreationStore"; // Import collection creation store
 import { CollectionCreationModal } from "@/components/CollectionCreationModal"; // Import the modal
 import { UsageChecker } from "@/components/UsageChecker"; // App-level usage checker
@@ -209,8 +207,6 @@ const DashboardLayout = () => {
   const { fetchSources } = useSourcesStore();
   const { currentOrganization } = useOrganizationStore();
   const hasConnectFeature = useOrganizationStore((state) => state.hasFeature('connect'));
-  const { openPanel } = useSidePanelStore(); // Get the function to open the panel
-
   // Usage check from store
   const checkActions = useUsageStore(state => state.checkActions);
   const actionChecks = useUsageStore(state => state.actionChecks);
@@ -410,7 +406,6 @@ const DashboardLayout = () => {
 
         {/* Global modals and panels - available on all pages */}
         <CollectionCreationModal />
-        <SidePanelFlow />
 
         <div className="flex h-screen overflow-hidden">
           {/* Mobile Menu Button */}

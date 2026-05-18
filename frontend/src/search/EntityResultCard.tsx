@@ -3,6 +3,7 @@ import { cn } from '@/lib/utils';
 import { ChevronDown, ChevronRight, ExternalLink, Copy, Check, Download, FileText } from 'lucide-react';
 import { getAppIconUrl } from '@/lib/utils/icons';
 import { useTheme } from '@/lib/theme-provider';
+import { copyTextToClipboard } from '@/lib/clipboard';
 
 interface EntityResultCardProps {
     result: any;
@@ -111,12 +112,10 @@ const EntityResultCardComponent: React.FC<EntityResultCardProps> = ({
     const [contentExpanded, setContentExpanded] = useState(false);
 
     const handleCopy = useCallback(async (text: string, field: string) => {
-        try {
-            await navigator.clipboard.writeText(text);
+        const ok = await copyTextToClipboard(text);
+        if (ok) {
             setCopiedField(field);
             setTimeout(() => setCopiedField(null), 2000);
-        } catch (error) {
-            console.error('Failed to copy:', error);
         }
     }, []);
 

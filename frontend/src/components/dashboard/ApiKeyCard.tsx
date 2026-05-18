@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Check, Copy, Key, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
+import { copyTextToClipboard } from "@/lib/clipboard";
 import { APIKey, useAPIKeysStore } from "@/lib/stores/apiKeys";
 import { useOrganizationContext } from "@/hooks/use-organization-context";
 
@@ -27,32 +28,6 @@ export const ApiKeyCard = () => {
     }
   }, [canManage, fetchAPIKeys]);
 
-  const fallbackCopyText = (value: string): boolean => {
-    const textArea = document.createElement("textarea");
-    textArea.value = value;
-    textArea.setAttribute("readonly", "");
-    textArea.style.position = "fixed";
-    textArea.style.left = "-9999px";
-    document.body.appendChild(textArea);
-    textArea.select();
-    const copied = document.execCommand("copy");
-    document.body.removeChild(textArea);
-    return copied;
-  };
-
-  const copyToClipboard = async (value: string): Promise<boolean> => {
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(value);
-        return true;
-      }
-    } catch {
-      // Fall back to execCommand when Clipboard API is blocked/insecure.
-    }
-
-    return fallbackCopyText(value);
-  };
-
   const handleCopyApiKey = async (apiKey: APIKey) => {
     let keyToCopy = apiKey.decrypted_key?.trim() ?? "";
 
@@ -70,7 +45,7 @@ export const ApiKeyCard = () => {
       return;
     }
 
-    const copied = await copyToClipboard(keyToCopy);
+    const copied = await copyTextToClipboard(keyToCopy);
     if (copied) {
       setCopySuccess(true);
       toast.success("API key copied to clipboard");

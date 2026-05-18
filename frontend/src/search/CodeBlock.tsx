@@ -1,5 +1,8 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { API_CONFIG } from '@/lib/api';
+import { getApiBaseUrl } from '@/lib/api';
+import { buildMcpConfigDisplaySnippet } from '@/lib/mcp-snippet-display';
+import { copyTextToClipboard } from '@/lib/clipboard';
+import { toast } from '@/hooks/use-toast';
 import { Terminal, Copy, Check, ExternalLink, X } from 'lucide-react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
@@ -50,17 +53,21 @@ export const ApiIntegrationDoc = ({
     const isDark = resolvedTheme === 'dark';
 
     const handleCopy = useCallback(async (text: string) => {
-        try {
-            await navigator.clipboard.writeText(text);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
-        } catch (error) {
-            console.error('Failed to copy:', error);
+        const ok = await copyTextToClipboard(text);
+        if (!ok) {
+            toast({
+                title: "Copy failed",
+                description: "Unable to access the clipboard. Please copy manually.",
+                variant: "destructive",
+            });
+            return;
         }
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
     }, []);
 
     const endpoints = useMemo(() => {
-        const apiBaseUrl = API_CONFIG.baseURL;
+        const apiBaseUrl = getApiBaseUrl();
         const searchQuery = query || "Ask a question about your data";
         const hasFilters = filter.length > 0;
 
@@ -184,31 +191,39 @@ ${nodeParams.join(',\n')},
 
 console.log(response.results${tier === "agentic" ? ", response.answer" : ""});`;
 
-        // ─── MCP config
-        const configSnippet = `// Add to your MCP client config
-// e.g. ~/.config/Claude/claude_desktop_config.json
+        // ─── MCP config (display may include // comments; copy uses JSON only)
+        const mcpConfigCopyJson = {
+            mcpServers: {
+                [`airweave-${collectionReadableId}`]: {
+                    command: "npx",
+                    args: ["-y", "musa-knowledge-search"],
+                    env: {
+                        AIRWEAVE_API_KEY: apiKey,
+                        AIRWEAVE_COLLECTION: collectionReadableId,
+                        AIRWEAVE_BASE_URL: apiBaseUrl,
+                    },
+                },
+            },
+        };
+        const mcpConfigCopyOnly = JSON.stringify(mcpConfigCopyJson, null, 2);
+        const configSnippet = buildMcpConfigDisplaySnippet(mcpConfigCopyOnly);
 
-{
-  "mcpServers": {
-    "airweave-${collectionReadableId}": {
-      "command": "npx",
-      "args": ["airweave-mcp-search"],
-      "env": {
-        "AIRWEAVE_API_KEY": "${apiKey}",
-        "AIRWEAVE_COLLECTION": "${collectionReadableId}",
-        "AIRWEAVE_BASE_URL": "${apiBaseUrl}"
-      }
-    }
-  }
-}`;
-
-        return { curlSnippet, pythonSnippet, nodeSnippet, configSnippet, apiUrl };
+        return {
+            curlSnippet,
+            pythonSnippet,
+            nodeSnippet,
+            configSnippet,
+            mcpConfigCopyOnly,
+            apiUrl,
+        };
     }, [collectionReadableId, apiKey, tier, retrievalStrategy, thinking, filter, query]);
 
     const currentCode = apiTab === "rest" ? endpoints.curlSnippet
         : apiTab === "python" ? endpoints.pythonSnippet
         : apiTab === "node" ? endpoints.nodeSnippet
         : endpoints.configSnippet;
+
+    const copyPayload = apiTab === "mcp" ? endpoints.mcpConfigCopyOnly : currentCode;
 
     const currentLanguage = apiTab === "rest" ? "bash"
         : apiTab === "python" ? "python"
@@ -260,7 +275,7 @@ console.log(response.results${tier === "agentic" ? ", response.answer" : ""});`;
                 </div>
                 <div className="flex items-center gap-3">
                     <button
-                        onClick={() => handleCopy(currentCode)}
+                        onClick={() => handleCopy(copyPayload)}
                         className={cn(
                             "inline-flex items-center gap-1 text-[10px] transition-colors",
                             isDark ? "text-gray-600 hover:text-gray-400" : "text-gray-400 hover:text-gray-600"

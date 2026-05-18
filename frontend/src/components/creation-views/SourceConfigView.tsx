@@ -14,6 +14,8 @@ import { ValidatedInput } from '@/components/ui/validated-input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TagInput } from '@/components/ui/tag-input';
 import { sourceConnectionNameValidation, getAuthFieldValidation, clientIdValidation, clientSecretValidation, redirectUrlValidation } from '@/lib/validation/rules';
+import { resolveSourceConnectionDescription } from '@/lib/source-connection-defaults';
+import { SourceConnectionDescriptionField } from '@/components/source-connections';
 import ReactMarkdown from 'react-markdown';
 
 interface SourceConfigViewProps {
@@ -142,6 +144,7 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
     hasNormalizedLegacyDefaultName.current = true;
   }, [sourceName, sourceConnectionName, connectionName, setSourceConnectionName]);
 
+  const [connectionDescription, setConnectionDescription] = useState('');
   const [connectionUrl, setConnectionUrl] = useState('');
   const visibleConfigFields = sourceDetails?.config_fields?.fields?.filter((field) => {
     // Hide legacy Project ID field for GitLab; repository URL is the primary path.
@@ -456,9 +459,14 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
 
       const targetCollectionReadableId = isAddingToExisting ? existingCollectionId : collectionId;
 
+      const collectionLabel = (collectionName || '').trim() || collectionId || 'collection';
       const payload: any = {
         name: effectiveName,
-        description: `${sourceName} connection for ${collectionName}`,
+        description: resolveSourceConnectionDescription(
+          connectionDescription,
+          sourceName || 'Source',
+          collectionLabel
+        ),
         short_name: selectedSource,
         readable_collection_id: targetCollectionReadableId,
         // Only include authentication field if not null
@@ -645,6 +653,14 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
                     />
                   </div>
 
+                  <SourceConnectionDescriptionField
+                    value={connectionDescription}
+                    onChange={setConnectionDescription}
+                    sourceDisplayName={sourceName || 'Source'}
+                    collectionDisplayName={(collectionName || '').trim() || collectionId || 'collection'}
+                    disabled={isCreating}
+                  />
+
                   {/* Auth Method Selection */}
                   {sourceDetails && (
                     <AuthMethodSelector
@@ -667,9 +683,6 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
                   {/* Direct auth fields (API keys, passwords, config) */}
                   {authMode === 'direct_auth' && requiresAuthFields() && sourceDetails?.auth_fields?.fields && (
                     <div className="space-y-3">
-                      <label className="block text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Direct Credentials Configuration
-                      </label>
                       {sourceDetails.auth_fields.fields.map((field) => (
                         <div key={field.name}>
                           <label className="block text-sm font-medium mb-1">

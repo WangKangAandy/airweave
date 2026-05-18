@@ -110,6 +110,12 @@ from .source_connection import (
     ReinitiateOAuthRequest,
     VerifyOAuthRequest,
 )
+from .source_import import (
+    SourceImportRequest,
+    SourceImportResponse,
+    SourceImportResultItem,
+    SourceImportSummary,
+)
 from .source_rate_limit import (
     SourceRateLimit,
     SourceRateLimitCreate,

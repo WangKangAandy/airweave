@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useCollectionCreationStore } from '@/stores/collectionCreationStore';
 import { apiClient } from '@/lib/api';
-import { ArrowLeft, Search, X } from 'lucide-react';
+import { ArrowLeft, ChevronDown, Search, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/lib/theme-provider';
 import { getAppIconUrl } from '@/lib/utils/icons';
+import { YAML_BULK_IMPORT_TYPE_SPECS } from '@/lib/yaml-import-field-specs';
+import { SourceYamlImportPanel } from '@/components/creation-views/SourceYamlImportPanel';
 import {
   Tooltip,
   TooltipContent,
@@ -25,6 +28,8 @@ interface SourceSelectViewProps {
   humanReadableId: string;
   isAddingToExisting?: boolean;
 }
+
+type CreateSourcePanelMode = 'select' | 'yaml';
 
 // Function to get comprehensive, specific descriptions for each source
 const getSourceDescription = (shortName: string, fallbackDescription?: string): string => {
@@ -58,21 +63,38 @@ const getSourceDescription = (shortName: string, fallbackDescription?: string): 
   return descriptions[shortName] || fallbackDescription || `Connect to ${shortName} to sync your data and keep your workspace organized.`;
 };
 
-export const SourceSelectView: React.FC<SourceSelectViewProps> = ({ humanReadableId, isAddingToExisting = false }) => {
+export const SourceSelectView: React.FC<SourceSelectViewProps> = ({ humanReadableId: _humanReadableId, isAddingToExisting = false }) => {
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === 'dark';
+  const navigate = useNavigate();
 
   const {
-    selectedSource,
     selectSource,
     setStep,
-    closeModal
+    closeModal,
+    collectionId,
+    reset,
   } = useCollectionCreationStore();
+
+  /** New collection flow only: dual-mode Create source (select vs Import YAML). */
+  const isNewCollectionSourceStep = !isAddingToExisting && !!collectionId;
+
+  const [panelMode, setPanelMode] = useState<CreateSourcePanelMode>('select');
+  const [expandedYamlType, setExpandedYamlType] = useState<string | null>(null);
 
   const [sources, setSources] = useState<Source[]>([]);
   const [filteredSources, setFilteredSources] = useState<Source[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+
+  const handleYamlImportSuccess = () => {
+    window.dispatchEvent(new CustomEvent('collection-created'));
+    if (collectionId) {
+      navigate(`/collections/${collectionId}`);
+    }
+    closeModal();
+    setTimeout(() => reset(), 500);
+  };
 
   useEffect(() => {
     loadSources();
@@ -131,12 +153,13 @@ export const SourceSelectView: React.FC<SourceSelectViewProps> = ({ humanReadabl
     <div className="h-full flex">
       {/* Left side - Header and Filter */}
       <div className={cn(
-        "w-80 border-r flex flex-col",
+        "border-r flex flex-col shrink-0 h-full min-h-0",
+        isNewCollectionSourceStep ? "w-96" : "w-80",
         isDark ? "border-gray-800 bg-gray-900/50" : "border-gray-200 bg-gray-50"
       )}>
-        {/* Header */}
-        <div className="px-6 py-6">
-          <div className="flex items-center gap-3 mb-6">
+        {/* Header + mode body (scrolls when needed) */}
+        <div className="px-6 pt-6 flex flex-col flex-1 min-h-0">
+          <div className="flex items-center gap-3 mb-4">
             {!isAddingToExisting && (
               <button
                 onClick={() => setStep('collection-form')}
@@ -152,59 +175,195 @@ export const SourceSelectView: React.FC<SourceSelectViewProps> = ({ humanReadabl
             )}
             <div>
               <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-                Select a source
+                {isNewCollectionSourceStep ? 'Create source' : 'Select a source'}
               </h2>
               <p className="text-sm text-gray-500 dark:text-gray-400">
-                Choose where to sync data from
+                {isNewCollectionSourceStep
+                  ? 'Connect one source or import several from YAML'
+                  : 'Choose where to sync data from'}
               </p>
             </div>
           </div>
 
-          {/* Search input */}
-          <div className="mb-4">
-            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
-              Filter
-            </label>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Type to search..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                autoFocus
-                className={cn(
-                  "w-full pl-9 pr-8 py-2 rounded-lg text-sm",
-                  "border transition-colors",
-                  "focus:outline-none focus:ring-1 focus:ring-blue-500",
-                  isDark
-                    ? "bg-gray-800 border-gray-700 text-white placeholder:text-gray-500"
-                    : "bg-white border-gray-200 text-gray-900 placeholder:text-gray-400"
-                )}
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-                  title="Clear search"
-                >
-                  <X className="w-3 h-3 text-gray-400" />
-                </button>
+          {isNewCollectionSourceStep && (
+            <div
+              className={cn(
+                "flex rounded-lg border p-0.5 gap-0.5 mb-4",
+                isDark ? "border-gray-700 bg-gray-900" : "border-gray-200 bg-white"
               )}
+              role="tablist"
+              aria-label="Create source mode"
+            >
+              <button
+                type="button"
+                role="tab"
+                aria-selected={panelMode === 'select'}
+                onClick={() => setPanelMode('select')}
+                className={cn(
+                  "flex-1 py-2 px-2 rounded-md text-xs font-medium transition-colors",
+                  panelMode === 'select'
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : isDark
+                      ? "text-gray-400 hover:text-gray-200"
+                      : "text-gray-600 hover:text-gray-900"
+                )}
+              >
+                Select a source
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={panelMode === 'yaml'}
+                onClick={() => setPanelMode('yaml')}
+                className={cn(
+                  "flex-1 py-2 px-2 rounded-md text-xs font-medium transition-colors",
+                  panelMode === 'yaml'
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : isDark
+                      ? "text-gray-400 hover:text-gray-200"
+                      : "text-gray-600 hover:text-gray-900"
+                )}
+              >
+                Import YAML
+              </button>
             </div>
-          </div>
+          )}
 
-          {/* Results count */}
-          <div className="text-xs text-gray-500 dark:text-gray-400">
-            {filteredSources.length} {filteredSources.length === 1 ? 'source' : 'sources'} available
-          </div>
+          {panelMode === 'select' && (
+            <>
+              {/* Search input */}
+              <div className="mb-4">
+                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+                  Filter
+                </label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Type to search..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    autoFocus={panelMode === 'select'}
+                    className={cn(
+                      "w-full pl-9 pr-8 py-2 rounded-lg text-sm",
+                      "border transition-colors",
+                      "focus:outline-none focus:ring-1 focus:ring-blue-500",
+                      isDark
+                        ? "bg-gray-800 border-gray-700 text-white placeholder:text-gray-500"
+                        : "bg-white border-gray-200 text-gray-900 placeholder:text-gray-400"
+                    )}
+                  />
+                  {searchQuery && (
+                    <button
+                      onClick={() => setSearchQuery('')}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                      title="Clear search"
+                    >
+                      <X className="w-3 h-3 text-gray-400" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Results count */}
+              <div className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                {filteredSources.length} {filteredSources.length === 1 ? 'source' : 'sources'} available
+              </div>
+            </>
+          )}
+
+          {isNewCollectionSourceStep && panelMode === 'yaml' && (
+            <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+              <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+                YAML-supported types
+              </p>
+              <div className="flex-1 overflow-y-auto pr-1 space-y-1 -mr-1">
+                {YAML_BULK_IMPORT_TYPE_SPECS.map((spec) => {
+                  const open = expandedYamlType === spec.type;
+                  return (
+                    <div
+                      key={spec.type}
+                      className={cn(
+                        "rounded-lg border text-left overflow-hidden",
+                        isDark ? "border-gray-700 bg-gray-900" : "border-gray-200 bg-white"
+                      )}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setExpandedYamlType(open ? null : spec.type)}
+                        className={cn(
+                          "w-full flex items-center justify-between gap-2 px-3 py-2.5 text-sm font-medium",
+                          isDark ? "text-white hover:bg-gray-800" : "text-gray-900 hover:bg-gray-50"
+                        )}
+                      >
+                        <span className="truncate">
+                          <span className="font-mono text-xs text-blue-500 dark:text-blue-400">{spec.type}</span>
+                          <span className="mx-1.5 text-gray-400">·</span>
+                          {spec.label}
+                        </span>
+                        <ChevronDown
+                          className={cn(
+                            "w-4 h-4 shrink-0 text-gray-400 transition-transform",
+                            open && "rotate-180"
+                          )}
+                        />
+                      </button>
+                      {open && (
+                        <div
+                          className={cn(
+                            "px-3 pb-3 pt-0 text-xs border-t space-y-3",
+                            isDark ? "border-gray-800 text-gray-300" : "border-gray-100 text-gray-600"
+                          )}
+                        >
+                          <div>
+                            <p className="font-medium text-gray-500 dark:text-gray-400 mb-1">Required</p>
+                            <ul className="list-disc pl-4 space-y-0.5">
+                              {spec.required.map((f) => (
+                                <li key={f.key}>
+                                  <code className="text-[11px] bg-muted px-1 rounded">{f.key}</code>
+                                  {f.hint ? <span className="text-gray-500"> — {f.hint}</span> : null}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                          {spec.optional.length > 0 && (
+                            <div>
+                              <p className="font-medium text-gray-500 dark:text-gray-400 mb-1">Optional</p>
+                              <ul className="list-disc pl-4 space-y-0.5">
+                                {spec.optional.map((f) => (
+                                  <li key={f.key}>
+                                    <code className="text-[11px] bg-muted px-1 rounded">{f.key}</code>
+                                    {f.hint ? <span className="text-gray-500"> — {f.hint}</span> : null}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                          <div>
+                            <p className="font-medium text-gray-500 dark:text-gray-400 mb-1">Example shape</p>
+                            <pre
+                              className={cn(
+                                "p-2 rounded-md text-[11px] font-mono whitespace-pre-wrap break-words overflow-x-auto",
+                                isDark ? "bg-gray-950 border border-gray-800" : "bg-gray-50 border border-gray-200"
+                              )}
+                            >
+                              {spec.exampleBlock}
+                            </pre>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {panelMode === 'select' && <div className="flex-1 min-h-0" aria-hidden />}
         </div>
 
-        {/* Spacer */}
-        <div className="flex-1" />
-
-        {/* Cancel button at bottom */}
-        <div className="px-6 pb-6">
+        {/* Cancel */}
+        <div className="px-6 py-3 shrink-0 border-t border-gray-200 dark:border-gray-800">
           <button
             onClick={() => closeModal()}
             className={cn(
@@ -219,8 +378,16 @@ export const SourceSelectView: React.FC<SourceSelectViewProps> = ({ humanReadabl
         </div>
       </div>
 
-      {/* Right side - Source grid */}
-      <div className="flex-1 overflow-auto px-6 pt-16 pb-6">
+      {/* Right side - Source grid or YAML import */}
+      <div className="flex-1 flex flex-col min-h-0 min-w-0">
+        {panelMode === 'yaml' && isNewCollectionSourceStep && collectionId ? (
+          <SourceYamlImportPanel
+            collectionReadableId={collectionId}
+            onImportSuccess={handleYamlImportSuccess}
+            className="flex-1"
+          />
+        ) : (
+          <div className="flex-1 overflow-auto px-6 pt-16 pb-6">
         {/* Source Grid */}
         {isLoading ? (
           <div className="flex items-center justify-center py-20">
@@ -335,6 +502,8 @@ export const SourceSelectView: React.FC<SourceSelectViewProps> = ({ humanReadabl
                 </Tooltip>
               </TooltipProvider>
             ))}
+          </div>
+        )}
           </div>
         )}
       </div>

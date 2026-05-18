@@ -15,6 +15,7 @@ import { SourceRateLimits } from '@/components/settings/SourceRateLimits';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { FeatureFlags } from '@/lib/constants/feature-flags';
+import { copyTextToClipboard } from '@/lib/clipboard';
 
 import { OrganizationSettings } from '@/components/settings/OrganizationSettings';
 
@@ -104,18 +105,18 @@ export const OrganizationSettingsUnified = () => {
   };
 
   // Handle copy to clipboard
-  const handleCopyId = () => {
-    if (currentOrganization?.id) {
-      navigator.clipboard.writeText(currentOrganization.id);
-      setIsCopied(true);
-
-      // Reset after animation completes
-      setTimeout(() => {
-        setIsCopied(false);
-      }, 1500);
-
-      toast.success('Organization ID copied to clipboard');
+  const handleCopyId = async () => {
+    if (!currentOrganization?.id) return;
+    const ok = await copyTextToClipboard(currentOrganization.id);
+    if (!ok) {
+      toast.error('Unable to copy organization ID');
+      return;
     }
+    setIsCopied(true);
+    setTimeout(() => {
+      setIsCopied(false);
+    }, 1500);
+    toast.success('Organization ID copied to clipboard');
   };
 
   const getRoleIcon = (role: string) => {
@@ -204,7 +205,7 @@ export const OrganizationSettingsUnified = () => {
                 {currentOrganization.id}
                 <button
                   className="ml-1.5 opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100 focus:outline-none"
-                  onClick={handleCopyId}
+                  onClick={() => void handleCopyId()}
                   title="Copy ID"
                 >
                   {isCopied ? (

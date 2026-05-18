@@ -192,6 +192,9 @@ const resolveDynamicBaseUrl = (): string => {
   return env.VITE_API_URL || 'http://localhost:8001';
 };
 
+/** Same origin the api client uses (runtime `window.ENV.API_URL`, else current host :8001, else Vite default). */
+export const getApiBaseUrl = (): string => resolveDynamicBaseUrl();
+
 // Get headers with optional organization context
 const getHeaders = async (): Promise<Record<string, string>> => {
   const token = await tokenProvider.getToken();

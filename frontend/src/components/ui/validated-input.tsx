@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { DESIGN_SYSTEM } from '@/lib/design-system';
 import { cn } from '@/lib/utils';
 import type { FieldValidation, ValidationResult } from '@/lib/validation/types';
 
@@ -134,9 +135,7 @@ export const ValidatedInput: React.FC<ValidatedInputProps> = ({
         onBlur={handleBlur}
         onFocus={handleFocus}
         className={cn(
-          'w-full px-4 py-2 rounded-lg text-sm',
-          'border transition-colors duration-150',
-          'focus:outline-none',
+          DESIGN_SYSTEM.forms.validatedField,
           getBorderClass(),
           className
         )}

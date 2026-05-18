@@ -4,6 +4,7 @@ import { ChevronRight, Copy, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { StatusBadge, formatFullDate, formatRelativeTime, formatTime } from "./shared";
 import { useMessage, type Message, type MessageAttempt } from "@/hooks/use-webhooks";
+import { copyTextToClipboard } from "@/lib/clipboard";
 
 /**
  * Syntax-highlighted JSON renderer
@@ -214,7 +215,8 @@ export function MessageDetail({ message }: MessageDetailProps) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(JSON.stringify(message?.payload, null, 2));
+    const ok = await copyTextToClipboard(JSON.stringify(message?.payload, null, 2));
+    if (!ok) return;
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };
@@ -258,7 +260,7 @@ export function MessageDetail({ message }: MessageDetailProps) {
               variant="ghost"
               size="sm"
               className="h-5 px-1.5 text-[10px] text-muted-foreground/40 hover:text-muted-foreground"
-              onClick={handleCopy}
+              onClick={() => void handleCopy()}
             >
               <Copy className="size-2.5 mr-1" />
               {copied ? "Copied" : "Copy"}

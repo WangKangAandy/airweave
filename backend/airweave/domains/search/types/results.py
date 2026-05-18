@@ -27,6 +27,8 @@ class SearchBreadcrumb(BaseModel):
 class SearchSystemMetadata(BaseModel):
     """System metadata in search result."""
 
+    # TODO(search-api): Add source_type (canonical) mirroring indexed connector short_name; keep
+    # source_name as deprecated alias. Optionally add source_connection_name when indexed.
     source_name: str = Field(..., description="Name of the source this entity belongs to.")
     entity_type: str = Field(
         ..., description="Type of the entity this entity represents in the source."

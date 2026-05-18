@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Check, Copy } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { posthog } from "@/lib/posthog-provider";
+import { copyTextToClipboard } from "@/lib/clipboard";
 import { useTheme } from "@/lib/theme-provider";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark, oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
@@ -47,9 +48,10 @@ export function SnippetFrame({ label, tabs, stepNumber, description }: SnippetFr
 
   const active = tabs.find((t) => t.id === activeTab) ?? tabs[0];
 
-  const handleCopy = () => {
+  const handleCopy = async () => {
     if (!active) return;
-    navigator.clipboard.writeText(active.code);
+    const ok = await copyTextToClipboard(active.code);
+    if (!ok) return;
     posthog.capture("connect_code_copied", {
       snippet_type: label.toLowerCase(),
       language: active.id,
@@ -103,7 +105,7 @@ export function SnippetFrame({ label, tabs, stepNumber, description }: SnippetFr
           </div>
         </div>
         <button
-          onClick={handleCopy}
+          onClick={() => void handleCopy()}
           className={cn("transition-colors p-1.5 rounded-md shrink-0", copyColor)}
         >
           {copied ? (

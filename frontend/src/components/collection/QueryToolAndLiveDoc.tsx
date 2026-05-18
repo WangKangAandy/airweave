@@ -1,7 +1,9 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { apiClient, API_CONFIG } from '@/lib/api';
+import { apiClient, getApiBaseUrl } from '@/lib/api';
+import { buildMcpConfigDisplaySnippet } from '@/lib/mcp-snippet-display';
+import { copyTextToClipboard } from '@/lib/clipboard';
 import { useUsageStore } from '@/lib/stores/usage';
 import { Copy, Check, Braces, SearchCode, TerminalSquare, Clock, AlertCircle, ChevronDown, ChevronRight, Terminal, Code, Layers, Book } from 'lucide-react';
 import { useTheme } from '@/lib/theme-provider';
@@ -114,7 +116,7 @@ export const QueryToolAndLiveDoc = ({ collectionReadableId }: QueryToolAndLiveDo
 
     // Memoize API URL to prevent unnecessary recalculations
     const apiUrl = useMemo(() => {
-        const baseUrlDomain = API_CONFIG.baseURL.replace(/^https?:\/\//, '');
+        const baseUrlDomain = getApiBaseUrl().replace(/^https?:\/\//, '');
         const baseUrl = `${baseUrlDomain}/collections/${collectionReadableId || '{collection_id}'}/search`;
         const params = [];
         const exampleQuery = query || "Ask a question about your data";
@@ -129,7 +131,7 @@ export const QueryToolAndLiveDoc = ({ collectionReadableId }: QueryToolAndLiveDo
 
     // Memoize API endpoints to prevent expensive recalculation on every render
     const apiEndpoints = useMemo(() => {
-        const apiBaseUrl = API_CONFIG.baseURL;
+        const apiBaseUrl = getApiBaseUrl();
         const apiUrl = `${apiBaseUrl}/collections/${collectionReadableId}/search`;
         const exampleQuery = query || "Ask a question about your data";
 
@@ -163,43 +165,45 @@ await client.collections.searchCollection("${collectionReadableId}", {
     responseType: "${responseType}"
 });`;
 
-        // MCP Server code examples
-        const configSnippet =
-            `{
-  "mcpServers": {
-    "airweave-${collectionReadableId}": {
-      "command": "npx",
-      "args": ["airweave-mcp-search"],
-      "env": {
-        "AIRWEAVE_API_KEY": "${apiKey}",
-        "AIRWEAVE_COLLECTION": "${collectionReadableId}",
-        "AIRWEAVE_BASE_URL": "${API_CONFIG.baseURL}"
-      }
-    }
-  }
-}`;
+        // MCP Server code examples (comments are display-only; copy uses JSON only)
+        const mcpConfigCopyJson = {
+            mcpServers: {
+                [`airweave-${collectionReadableId}`]: {
+                    command: "npx",
+                    args: ["-y", "musa-knowledge-search"],
+                    env: {
+                        AIRWEAVE_API_KEY: apiKey,
+                        AIRWEAVE_COLLECTION: collectionReadableId,
+                        AIRWEAVE_BASE_URL: getApiBaseUrl(),
+                    },
+                },
+            },
+        };
+        const mcpConfigCopyOnly = JSON.stringify(mcpConfigCopyJson, null, 2);
+        const configSnippet = buildMcpConfigDisplaySnippet(mcpConfigCopyOnly);
 
         const installSnippet =
             `# Install the MCP server globally
-npm install -g airweave-mcp-search@1.0.7
+npm install -g musa-knowledge-search@1.0.7
 
 # Or run directly with npx
-npx airweave-mcp-search`;
+npx -y musa-knowledge-search`;
 
         const cliSnippet =
             `# Set environment variables
 export AIRWEAVE_API_KEY="${apiKey}"
 export AIRWEAVE_COLLECTION="${collectionReadableId}"
-export AIRWEAVE_BASE_URL="${API_CONFIG.baseURL}"
+export AIRWEAVE_BASE_URL="${getApiBaseUrl()}"
 
 # Run the MCP server
-airweave-mcp-search`;
+musa-knowledge-search`;
 
         return {
             curlSnippet,
             pythonSnippet,
             nodeSnippet,
             configSnippet,
+            mcpConfigCopyOnly,
             installSnippet,
             cliSnippet
         };
@@ -282,22 +286,18 @@ airweave-mcp-search`;
     }, [query, collectionReadableId, responseType, queriesAllowed, checkQueryAction]);
 
     const handleCopyObjects = useCallback(async () => {
-        try {
-            await navigator.clipboard.writeText(objects);
+        const ok = await copyTextToClipboard(objects);
+        if (ok) {
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
-        } catch (error) {
-            console.error('Failed to copy:', error);
         }
     }, [objects]);
 
     const handleCopyCompletion = useCallback(async () => {
-        try {
-            await navigator.clipboard.writeText(completion);
+        const ok = await copyTextToClipboard(completion);
+        if (ok) {
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
-        } catch (error) {
-            console.error('Failed to copy:', error);
         }
     }, [completion]);
 
@@ -406,7 +406,7 @@ airweave-mcp-search`;
                                     "h-8 w-8 rounded-none",
                                     isDark ? "text-gray-400 hover:text-gray-300" : "text-gray-500 hover:text-gray-700"
                                 )}
-                                onClick={() => navigator.clipboard.writeText(`https://${apiUrl}`)}
+                                onClick={() => void copyTextToClipboard(`https://${apiUrl}`)}
                             >
                                 <Copy className="h-3.5 w-3.5" />
                             </Button>
@@ -997,7 +997,8 @@ airweave-mcp-search`;
                                         {apiTab === "claude" && (
                                             <CodeBlock
                                                 code={apiEndpoints.configSnippet}
-                                                language="json"
+                                                copyCode={apiEndpoints.mcpConfigCopyOnly}
+                                                language="javascript"
                                                 badgeText="CONFIG"
                                                 badgeColor="bg-purple-600 hover:bg-purple-600"
                                                 title="Claude Desktop MCP Configuration"
@@ -1010,7 +1011,8 @@ airweave-mcp-search`;
                                         {apiTab === "cursor" && (
                                             <CodeBlock
                                                 code={apiEndpoints.configSnippet}
-                                                language="json"
+                                                copyCode={apiEndpoints.mcpConfigCopyOnly}
+                                                language="javascript"
                                                 badgeText="CONFIG"
                                                 badgeColor="bg-blue-600 hover:bg-blue-600"
                                                 title="Cursor MCP Configuration"
@@ -1023,7 +1025,8 @@ airweave-mcp-search`;
                                         {apiTab === "windsurf" && (
                                             <CodeBlock
                                                 code={apiEndpoints.configSnippet}
-                                                language="json"
+                                                copyCode={apiEndpoints.mcpConfigCopyOnly}
+                                                language="javascript"
                                                 badgeText="CONFIG"
                                                 badgeColor="bg-teal-600 hover:bg-teal-600"
                                                 title="Windsurf MCP Configuration"

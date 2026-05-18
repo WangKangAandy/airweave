@@ -10,7 +10,9 @@ import { searchDuration, searchTotal } from "../metrics/prometheus.js";
 
 const filterConditionSchema = z.object({
     field: z.string().describe(
-        "Field to filter on. Options: entity_id, name, created_at, updated_at, " +
+        "Field to filter on. NOTE: airweave_system_metadata.source_name is source TYPE " +
+        "(connector short_name, e.g. github), not connection display name — TODO(platform): " +
+        "rename to source_type in API. Options: entity_id, name, created_at, updated_at, " +
         "breadcrumbs.entity_id, breadcrumbs.name, breadcrumbs.entity_type, " +
         "airweave_system_metadata.source_name, airweave_system_metadata.entity_type, " +
         "airweave_system_metadata.original_entity_id, airweave_system_metadata.chunk_index, " +

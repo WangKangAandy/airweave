@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { toast } from 'sonner';
+import { copyTextToClipboard } from '@/lib/clipboard';
 import { Copy, ArrowRight, Loader2, Settings, RefreshCw, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/lib/theme-provider';
@@ -39,12 +40,15 @@ export const SourceAuthenticationView: React.FC<SourceAuthenticationViewProps> =
   const [isConnecting, setIsConnecting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const copyToClipboard = () => {
-    if (authenticationUrl) {
-      navigator.clipboard.writeText(authenticationUrl);
+  const copyToClipboard = async () => {
+    if (!authenticationUrl) return;
+    const ok = await copyTextToClipboard(authenticationUrl);
+    if (ok) {
       setCopied(true);
       toast.success('Link copied to clipboard');
       setTimeout(() => setCopied(false), 2000);
+    } else {
+      toast.error('Clipboard access failed. Please copy the link manually.');
     }
   };
 

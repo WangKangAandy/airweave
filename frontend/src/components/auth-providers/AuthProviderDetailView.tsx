@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { apiClient } from "@/lib/api";
 import { Copy, Check, Trash, Pencil, AlertTriangle, AlertCircle, Loader2, Link } from "lucide-react";
 import { toast } from "sonner";
+import { copyTextToClipboard } from "@/lib/clipboard";
 import { getAuthProviderIconUrl } from "@/lib/utils/icons";
 import { format } from "date-fns";
 import { useAuthProvidersStore } from "@/lib/stores/authProviders";
@@ -289,16 +290,14 @@ export const AuthProviderDetailView: React.FC<AuthProviderDetailViewProps> = ({
     }, [authProviderConnectionId, authProviderName, onError, isClosing]);
 
     const handleCopy = async (value: string, fieldName: string) => {
-        try {
-            await navigator.clipboard.writeText(value);
+        const ok = await copyTextToClipboard(value);
+        if (ok) {
             setCopiedField(fieldName);
             toast.success(`${fieldName} copied to clipboard`);
-
-            // Reset copied state after 2 seconds
             setTimeout(() => {
                 setCopiedField(null);
             }, 2000);
-        } catch (error) {
+        } else {
             toast.error("Failed to copy to clipboard");
         }
     };

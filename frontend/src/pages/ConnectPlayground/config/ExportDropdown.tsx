@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ClipboardCopy, Check, FileText, FileCode, BotMessageSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { posthog } from "@/lib/posthog-provider";
+import { copyTextToClipboard } from "@/lib/clipboard";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -82,8 +83,9 @@ const FORMATS = [
 export function ExportDropdown({ config }: ExportDropdownProps) {
   const [copied, setCopied] = useState<string | null>(null);
 
-  const handleCopy = (formatId: string, builder: (c: PlaygroundConfig) => string) => {
-    navigator.clipboard.writeText(builder(config));
+  const handleCopy = async (formatId: string, builder: (c: PlaygroundConfig) => string) => {
+    const ok = await copyTextToClipboard(builder(config));
+    if (!ok) return;
     posthog.capture("connect_export_copied", { format: formatId });
     setCopied(formatId);
     setTimeout(() => setCopied(null), 1500);
@@ -104,7 +106,7 @@ export function ExportDropdown({ config }: ExportDropdownProps) {
           return (
             <button
               key={fmt.id}
-              onClick={() => handleCopy(fmt.id, fmt.build)}
+              onClick={() => void handleCopy(fmt.id, fmt.build)}
               className={cn(
                 "w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-left transition-colors",
                 isCopied

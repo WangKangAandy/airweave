@@ -12,6 +12,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { copyTextToClipboard } from "@/lib/clipboard";
 import {
   Tooltip,
   TooltipContent,
@@ -159,7 +160,8 @@ function SecretField({ subscriptionId }: { subscriptionId: string }) {
 
   const handleCopy = async () => {
     if (!secret) return;
-    await navigator.clipboard.writeText(secret);
+    const ok = await copyTextToClipboard(secret);
+    if (!ok) return;
     setIsCopied(true);
     setTimeout(() => setIsCopied(false), 2000);
   };
@@ -180,7 +182,7 @@ function SecretField({ subscriptionId }: { subscriptionId: string }) {
         <Button
           variant="outline"
           size="icon"
-          onClick={handleCopy}
+          onClick={() => void handleCopy()}
           disabled={!secret}
           className="h-7 w-7 shrink-0"
         >

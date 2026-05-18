@@ -15,6 +15,7 @@ import {
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { materialOceanic, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { DESIGN_SYSTEM } from '@/lib/design-system';
+import { copyTextToClipboard } from '@/lib/clipboard';
 import { CollapsibleCard } from '@/components/ui/CollapsibleCard';
 import type { SearchEvent } from '@/search/types';
 import { EntityResultCard } from './EntityResultCard';
@@ -197,11 +198,11 @@ export const SearchResponse: React.FC<SearchResponseProps> = ({
     const handleCopy = useCallback(async () => {
         if (activeTab === 'trace') {
             const text = traceContainerRef.current?.innerText || '';
-            if (text.trim()) await navigator.clipboard.writeText(text.trim());
+            if (text.trim()) await copyTextToClipboard(text.trim());
         } else if (activeTab === 'raw' && searchResponse) {
-            await navigator.clipboard.writeText(JSON.stringify(searchResponse, null, 2));
+            await copyTextToClipboard(JSON.stringify(searchResponse, null, 2));
         } else if (activeTab === 'entities' && results.length > 0) {
-            await navigator.clipboard.writeText(JSON.stringify(results, null, 2));
+            await copyTextToClipboard(JSON.stringify(results, null, 2));
         }
     }, [activeTab, results, searchResponse]);
 

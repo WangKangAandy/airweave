@@ -389,6 +389,8 @@ class EntityPipeline:
                         ".", 1
                     )[-1]
             else:
+                # TODO(platform): Persist source_type (short_name) under a renamed field; add
+                # source_connection_name from sync_context.connection.name for indexed filters.
                 entity.airweave_system_metadata.source_name = sync_context.source_short_name
             entity.airweave_system_metadata.entity_type = entity.__class__.__name__
             entity.airweave_system_metadata.sync_id = sync_context.sync.id

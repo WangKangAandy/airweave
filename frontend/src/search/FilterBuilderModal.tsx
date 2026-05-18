@@ -14,6 +14,7 @@ import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { materialOceanic, oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { DESIGN_SYSTEM } from "@/lib/design-system";
 import { generateUuid } from "@/lib/utils/uuid";
+import { copyTextToClipboard } from "@/lib/clipboard";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -183,10 +184,12 @@ function JsonPreview({ code, isDark }: { code: string; isDark: boolean }) {
         },
     };
 
-    const handleCopy = useCallback(() => {
-        navigator.clipboard.writeText(code);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1200);
+    const handleCopy = useCallback(async () => {
+        const ok = await copyTextToClipboard(code);
+        if (ok) {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1200);
+        }
     }, [code]);
 
     return (
