@@ -7,7 +7,6 @@ import { copyTextToClipboard } from "@/lib/clipboard";
 import { useUsageStore } from "@/lib/stores/usage";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/use-toast";
 import { getAppIconUrl } from "@/lib/utils/icons";
 import { useTheme } from "@/lib/theme-provider";
@@ -64,22 +63,17 @@ interface DeleteCollectionDialogProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     onConfirm: () => void;
-    collectionReadableId: string;
-    confirmText: string;
-    setConfirmText: (text: string) => void;
+    isDeleting?: boolean;
 }
 
 const DeleteCollectionDialog = ({
     open,
     onOpenChange,
     onConfirm,
-    collectionReadableId,
-    confirmText,
-    setConfirmText
+    isDeleting = false,
 }: DeleteCollectionDialogProps) => {
     const { resolvedTheme } = useTheme();
     const isDark = resolvedTheme === 'dark';
-    const isConfirmValid = confirmText === collectionReadableId;
 
     return (
         <AlertDialog open={open} onOpenChange={onOpenChange}>
@@ -125,61 +119,19 @@ const DeleteCollectionDialog = ({
                             </ul>
                         </div>
 
-                        {/* Confirmation input */}
-                        <div className="space-y-3">
-                            <div>
-                                <label htmlFor="confirm-delete" className="text-sm font-medium text-foreground block mb-2">
-                                    Type <span className="font-mono font-semibold text-destructive bg-destructive/10 px-1.5 py-0.5 rounded">
-                                        {collectionReadableId}
-                                    </span> to confirm deletion
-                                </label>
-                                <Input
-                                    id="confirm-delete"
-                                    value={confirmText}
-                                    onChange={(e) => setConfirmText(e.target.value)}
-                                    className={cn(
-                                        "w-full transition-colors",
-                                        isConfirmValid && confirmText.length > 0
-                                            ? "border-green-500 focus:border-green-500 focus:ring-green-500/20"
-                                            : confirmText.length > 0
-                                                ? "border-destructive focus:border-destructive focus:ring-destructive/20"
-                                                : ""
-                                    )}
-                                    placeholder={collectionReadableId}
-                                />
-                            </div>
-
-                            {/* Validation feedback */}
-                            {confirmText.length > 0 && (
-                                <div className="flex items-center gap-2 text-sm">
-                                    {isConfirmValid ? (
-                                        <>
-                                            <Check className="w-4 h-4 text-green-500" />
-                                            <span className="text-green-600 dark:text-green-400">
-                                                Confirmation matches
-                                            </span>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <AlertCircle className="w-4 h-4 text-destructive" />
-                                            <span className="text-destructive">
-                                                Confirmation does not match
-                                            </span>
-                                        </>
-                                    )}
-                                </div>
-                            )}
-                        </div>
+                        <p className="text-sm text-muted-foreground">
+                            Please confirm only if you are sure.
+                        </p>
                     </AlertDialogDescription>
                 </AlertDialogHeader>
 
                 <AlertDialogFooter className="gap-3">
-                    <AlertDialogCancel className="flex-1">
+                    <AlertDialogCancel className="flex-1" disabled={isDeleting}>
                         Cancel
                     </AlertDialogCancel>
                     <AlertDialogAction
                         onClick={onConfirm}
-                        disabled={!isConfirmValid}
+                        disabled={isDeleting}
                         className={cn(
                             "flex-1 bg-destructive text-destructive-foreground hover:bg-destructive/90",
                             "disabled:opacity-50 disabled:cursor-not-allowed",
@@ -187,7 +139,7 @@ const DeleteCollectionDialog = ({
                         )}
                     >
                         <Trash className="w-4 h-4 mr-2" />
-                        Delete Collection
+                        {isDeleting ? "Deleting..." : "Delete Collection"}
                     </AlertDialogAction>
                 </AlertDialogFooter>
             </AlertDialogContent>
@@ -283,7 +235,6 @@ const Collections = () => {
 
     // Add state for delete dialog
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-    const [confirmText, setConfirmText] = useState('');
     const [isDeleting, setIsDeleting] = useState(false);
 
     // Add state for copy animation
@@ -822,7 +773,7 @@ const Collections = () => {
 
     // Handle collection deletion
     const handleDeleteCollection = async () => {
-        if (!readable_id || confirmText !== readable_id) return;
+        if (!readable_id) return;
 
         setIsDeleting(true);
         try {
@@ -852,7 +803,6 @@ const Collections = () => {
         } finally {
             setIsDeleting(false);
             setShowDeleteDialog(false);
-            setConfirmText(''); // Reset confirm text
         }
     };
 
@@ -1512,9 +1462,7 @@ const Collections = () => {
                         open={showDeleteDialog}
                         onOpenChange={setShowDeleteDialog}
                         onConfirm={handleDeleteCollection}
-                        collectionReadableId={collection?.readable_id || ''}
-                        confirmText={confirmText}
-                        setConfirmText={setConfirmText}
+                        isDeleting={isDeleting}
                     />
 
                     <Dialog
